@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Architecture - Knowledge Bank</title>
+  <link rel="stylesheet" href="./assets/css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Architecture</div>
+    <nav class="nav">
+      <a href="./index.html">Overview</a>
+      <a href="./architecture.html">Architecture</a>
+      <a href="./backend-ai.html">Backend + AI</a>
+      <a href="./frontend.html">Frontend</a>
+      <a href="./security-data-ops.html">Security + Data + Ops</a>
+      <a href="./roadmap-todo.html">Roadmap + TODO</a>
+      <a href="./interview.html">Interview</a>
+    </nav>
+  </header>
+
+  <main class="wrapper">
+    <section class="hero">
+      <h1>System Architecture Strategy</h1>
+      <p>Start as a modular monolith for delivery speed, then extract microservices as complexity and scale justify the split.</p>
+    </section>
+
+    <section class="row">
+      <article class="card">
+        <h3>Flow Diagram</h3>
+        <svg viewBox="0 0 850 360" width="100%" role="img" aria-label="Architecture flow diagram">
+          <rect x="20" y="20" width="150" height="58" rx="10" fill="#eaf3ff" stroke="#0969da"/>
+          <text x="95" y="53" text-anchor="middle" font-size="14" fill="#1f2d3a">Angular UI</text>
+
+          <rect x="220" y="20" width="200" height="58" rx="10" fill="#eaf3ff" stroke="#0969da"/>
+          <text x="320" y="53" text-anchor="middle" font-size="14" fill="#1f2d3a">FastAPI Core</text>
+
+          <rect x="470" y="20" width="170" height="58" rx="10" fill="#fff7eb" stroke="#f59e0b"/>
+          <text x="555" y="53" text-anchor="middle" font-size="14" fill="#1f2d3a">AI Orchestrator</text>
+
+          <rect x="680" y="20" width="150" height="58" rx="10" fill="#ebfff2" stroke="#0f9d58"/>
+          <text x="755" y="53" text-anchor="middle" font-size="14" fill="#1f2d3a">Discord API</text>
+
+          <rect x="220" y="130" width="200" height="58" rx="10" fill="#fff" stroke="#ccd8e5"/>
+          <text x="320" y="163" text-anchor="middle" font-size="14" fill="#1f2d3a">Policy Guard</text>
+
+          <rect x="470" y="130" width="170" height="58" rx="10" fill="#fff" stroke="#ccd8e5"/>
+          <text x="555" y="163" text-anchor="middle" font-size="14" fill="#1f2d3a">RAG Service</text>
+
+          <rect x="20" y="250" width="190" height="58" rx="10" fill="#fff" stroke="#ccd8e5"/>
+          <text x="115" y="283" text-anchor="middle" font-size="14" fill="#1f2d3a">PostgreSQL + pgvector</text>
+
+          <rect x="250" y="250" width="120" height="58" rx="10" fill="#fff" stroke="#ccd8e5"/>
+          <text x="310" y="283" text-anchor="middle" font-size="14" fill="#1f2d3a">Redis</text>
+
+          <rect x="410" y="250" width="160" height="58" rx="10" fill="#fff" stroke="#ccd8e5"/>
+          <text x="490" y="283" text-anchor="middle" font-size="14" fill="#1f2d3a">Audit Stream</text>
+
+          <rect x="610" y="250" width="210" height="58" rx="10" fill="#fff" stroke="#ccd8e5"/>
+          <text x="715" y="283" text-anchor="middle" font-size="14" fill="#1f2d3a">Workers (Discord/Analytics)</text>
+
+          <line x1="170" y1="49" x2="220" y2="49" stroke="#0969da" stroke-width="2"/>
+          <line x1="420" y1="49" x2="470" y2="49" stroke="#0969da" stroke-width="2"/>
+          <line x1="640" y1="49" x2="680" y2="49" stroke="#0969da" stroke-width="2"/>
+          <line x1="320" y1="78" x2="320" y2="130" stroke="#0969da" stroke-width="2"/>
+          <line x1="555" y1="78" x2="555" y2="130" stroke="#f59e0b" stroke-width="2"/>
+          <line x1="320" y1="188" x2="310" y2="250" stroke="#738496" stroke-width="2"/>
+          <line x1="555" y1="188" x2="490" y2="250" stroke="#738496" stroke-width="2"/>
+          <line x1="420" y1="159" x2="470" y2="159" stroke="#738496" stroke-width="2"/>
+        </svg>
+      </article>
+
+      <article class="card">
+        <h3>Decisions</h3>
+        <ul>
+          <li>Use FastAPI as system orchestrator.</li>
+          <li>Keep Spring Boot optional for phase-2 policy complexity.</li>
+          <li>Tenant isolation via `tenant_id` and policy-scoped execution.</li>
+          <li>One bot identity per tenant with encrypted credentials.</li>
+          <li>Event pipeline for moderation summaries and behavior scoring.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h3>Tenant Isolation Controls</h3>
+        <ul>
+          <li>Global tenant context middleware</li>
+          <li>Row-level filters and table indexes</li>
+          <li>Redis key namespacing by tenant</li>
+          <li>Policy boundary checks per request</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Reliability Controls</h3>
+        <ul>
+          <li>Idempotency keys for mutating actions</li>
+          <li>Retry + backoff on Discord failures</li>
+          <li>Circuit breaker on rate-limit spikes</li>
+          <li>Dead-letter queue for failed jobs</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Migration Path</h3>
+        <ul>
+          <li>Modular monolith in v1</li>
+          <li>Split AI/Policy/Discord services incrementally</li>
+          <li>Contract tests before each extraction</li>
+          <li>No early microservice tax</li>
+        </ul>
+      </article>
+    </section>
+  </main>
+
+  <script src="./assets/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Backend + AI - Knowledge Bank</title>
+  <link rel="stylesheet" href="./assets/css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Backend + AI</div>
+    <nav class="nav">
+      <a href="./index.html">Overview</a>
+      <a href="./architecture.html">Architecture</a>
+      <a href="./backend-ai.html">Backend + AI</a>
+      <a href="./frontend.html">Frontend</a>
+      <a href="./security-data-ops.html">Security + Data + Ops</a>
+      <a href="./roadmap-todo.html">Roadmap + TODO</a>
+      <a href="./interview.html">Interview</a>
+    </nav>
+  </header>
+
+  <main class="wrapper">
+    <section class="hero">
+      <h1>Execution Engine: FastAPI + Discord + LLM Router</h1>
+      <p>This page combines Discord setup, backend APIs, tool execution safety, RAG, confidence control, and autonomous moderation mechanics.</p>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h3>Discord Setup Quick Path</h3>
+        <ol>
+          <li>Create app + bot in Developer Portal</li>
+          <li>Enable required OAuth scopes</li>
+          <li>Enable minimum required intents</li>
+          <li>Register slash commands + bot install flow</li>
+          <li>Persist per-tenant bot credentials encrypted</li>
+        </ol>
+      </article>
+      <article class="card">
+        <h3>FastAPI Module Design</h3>
+        <p><code>api/</code>, <code>domain/</code>, <code>infra/</code>, and <code>workers/</code>. Keep policy and execution layers separate to guarantee predictable safety gates.</p>
+      </article>
+      <article class="card">
+        <h3>Essential Endpoints</h3>
+        <ul>
+          <li><code>POST /chat/messages</code></li>
+          <li><code>POST /actions/confirm</code></li>
+          <li><code>POST /channels/bulk-create</code></li>
+          <li><code>POST /moderation/user/sanction</code></li>
+          <li><code>GET /analytics/moderation-summary</code></li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="row">
+      <article class="card">
+        <h3>Prompt To Action Lifecycle</h3>
+        <div class="timeline">
+          <div class="step"><strong>1) Parse</strong> Intent classification + candidate tools.</div>
+          <div class="step"><strong>2) Constrain</strong> Enforce tool schema + policy boundaries.</div>
+          <div class="step"><strong>3) Assess</strong> Compute risk + confidence score.</div>
+          <div class="step"><strong>4) Confirm</strong> Ask user for approval on risky operations.</div>
+          <div class="step"><strong>5) Execute</strong> Run Discord action adapter with idempotency.</div>
+          <div class="step"><strong>6) Audit</strong> Persist full decision trace and execution receipt.</div>
+        </div>
+      </article>
+      <article class="card">
+        <h3>Confidence Policy</h3>
+        <p><span class="status-low">High confidence (&gt;=0.90):</span> execute safe actions.</p>
+        <p><span class="status-med">Medium confidence (0.75-0.89):</span> ask clarification/confirmation.</p>
+        <p><span class="status-high">Low confidence (&lt;0.75):</span> block execution and rephrase prompt.</p>
+      </article>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h3>RAG Design</h3>
+        <ul>
+          <li>Tenant-isolated knowledge index</li>
+          <li>Owner-controlled document ingestion</li>
+          <li>Citation for behavior and policy answers</li>
+          <li>Refresh controls and freshness metadata</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Autonomy Mode Controls</h3>
+        <ul>
+          <li>Action whitelist by risk tier</li>
+          <li>Protected users/channels/roles</li>
+          <li>Rate caps per min/hour/day</li>
+          <li>Immediate kill switch</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Spring Boot Integration (Later)</h3>
+        <p>Extract policy engine when rule complexity grows. Keep FastAPI as orchestrator, and call Spring Boot for policy evaluation through versioned contracts.</p>
+      </article>
+    </section>
+  </main>
+
+  <script src="./assets/js/app.js"></script>
+</body>
+</html>

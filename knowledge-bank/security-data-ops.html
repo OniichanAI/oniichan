@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security, Data, and Ops - Knowledge Bank</title>
+  <link rel="stylesheet" href="./assets/css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Security + Data + Ops</div>
+    <nav class="nav">
+      <a href="./index.html">Overview</a>
+      <a href="./architecture.html">Architecture</a>
+      <a href="./backend-ai.html">Backend + AI</a>
+      <a href="./frontend.html">Frontend</a>
+      <a href="./security-data-ops.html">Security + Data + Ops</a>
+      <a href="./roadmap-todo.html">Roadmap + TODO</a>
+      <a href="./interview.html">Interview</a>
+    </nav>
+  </header>
+
+  <main class="wrapper">
+    <section class="hero">
+      <h1>Security, Data Model, and Operations</h1>
+      <p>Secure-by-default v1 with a clear path for enterprise hardening later.</p>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h3>Authentication</h3>
+        <ul>
+          <li>Discord OAuth only in v1</li>
+          <li>Short-lived access token</li>
+          <li>Rotating refresh token</li>
+          <li>Session revocation support</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Authorization</h3>
+        <ul>
+          <li>RBAC baseline</li>
+          <li>Policy checks for context-aware decisions</li>
+          <li>Auto role mapping with manual override</li>
+          <li>Protected entities enforcement</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Audit Requirements</h3>
+        <ul>
+          <li>Log actor, prompt, intent, confidence</li>
+          <li>Store policy decision traces</li>
+          <li>Store execution receipts</li>
+          <li>Immutable append-only ledger</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="row">
+      <article class="card">
+        <h3>Database Recommendation</h3>
+        <p><strong>Primary:</strong> PostgreSQL</p>
+        <p><strong>Vector:</strong> `pgvector` in same DB for v1</p>
+        <p><strong>Cache/Queue:</strong> Redis</p>
+        <p><strong>Object storage:</strong> MinIO local now, S3-compatible later</p>
+      </article>
+      <article class="card">
+        <h3>Infrastructure Plan</h3>
+        <p>Start local with Docker Compose and move to AWS or Hetzner once budget unlocks. Keep components cloud-agnostic.</p>
+      </article>
+    </section>
+
+    <section class="card matrix">
+      <h3>Risk Control Matrix</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Risk</th>
+            <th>Default Policy</th>
+            <th>Execution Rule</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Low</td>
+            <td>Read/summary actions</td>
+            <td>Auto execute if confidence high</td>
+          </tr>
+          <tr>
+            <td>Medium</td>
+            <td>Role/channel permission edits</td>
+            <td>Confirm when confidence medium</td>
+          </tr>
+          <tr>
+            <td>High</td>
+            <td>Kick/ban/delete/mass actions</td>
+            <td>Mandatory confirmation + full audit trace</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h3>DevOps Baseline</h3>
+        <ul>
+          <li>GitHub Actions CI/CD</li>
+          <li>dev/staging/prod environments</li>
+          <li>Trunk-based + feature flags</li>
+          <li>Auto rollback triggers</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Observability Stack</h3>
+        <ul>
+          <li>OpenTelemetry instrumentation</li>
+          <li>Prometheus + Grafana metrics</li>
+          <li>Loki logs and trace tooling</li>
+          <li>Domain metrics: tool success, confidence spread, false positives</li>
+        </ul>
+      </article>
+    </section>
+  </main>
+
+  <script src="./assets/js/app.js"></script>
+</body>
+</html>

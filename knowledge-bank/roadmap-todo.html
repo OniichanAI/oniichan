@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roadmap and TODO - Knowledge Bank</title>
+  <link rel="stylesheet" href="./assets/css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Roadmap + TODO</div>
+    <nav class="nav">
+      <a href="./index.html">Overview</a>
+      <a href="./architecture.html">Architecture</a>
+      <a href="./backend-ai.html">Backend + AI</a>
+      <a href="./frontend.html">Frontend</a>
+      <a href="./security-data-ops.html">Security + Data + Ops</a>
+      <a href="./roadmap-todo.html">Roadmap + TODO</a>
+      <a href="./interview.html">Interview</a>
+    </nav>
+  </header>
+
+  <main class="wrapper">
+    <section class="hero">
+      <h1>Execution Roadmap and Task Tracker</h1>
+      <p>Use this page as your tactical implementation board. Filter tasks by keyword and run weekly planning from this list.</p>
+    </section>
+
+    <section class="card">
+      <h3>12-Week Roadmap</h3>
+      <div class="timeline">
+        <div class="step"><strong>Week 1-2:</strong> foundations, OAuth, tenant schema, project scaffolding</div>
+        <div class="step"><strong>Week 3-5:</strong> chat-to-tool execution and confirmation workflows</div>
+        <div class="step"><strong>Week 6-8:</strong> moderation intelligence and behavior scoring</div>
+        <div class="step"><strong>Week 9-10:</strong> autonomy mode and strict safety controls</div>
+        <div class="step"><strong>Week 11-12:</strong> hardening, full QA, and launch readiness</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Task Filter</h3>
+      <input id="taskFilter" type="text" placeholder="Filter tasks (e.g., oauth, rag, redis, dashboard)" style="width:100%;padding:10px;border:1px solid #d8e1ec;border-radius:10px;">
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h3>Foundation</h3>
+        <ul>
+          <li data-task="repo setup mono-repo docs">Initialize mono-repo structure</li>
+          <li data-task="docker compose local stack">Create local Docker Compose stack</li>
+          <li data-task="discord oauth application setup">Configure Discord OAuth and app setup</li>
+          <li data-task="tenant schema postgres">Implement tenant-aware data schema</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Backend + AI</h3>
+        <ul>
+          <li data-task="fastapi auth callback">Build auth and callback flows</li>
+          <li data-task="chat tool routing llm">Implement chat orchestration and model router</li>
+          <li data-task="confidence threshold confirmation">Add confidence and confirmation gates</li>
+          <li data-task="policy guard execution">Implement pre-execution policy checks</li>
+          <li data-task="rag embeddings citations">Build RAG ingestion/retrieval with citations</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Frontend</h3>
+        <ul>
+          <li data-task="angular shell routing guards">Build Angular shell and route guards</li>
+          <li data-task="chatops streaming ui">Build streaming ChatOps console</li>
+          <li data-task="action confirmation modal">Implement high-risk confirmation UI</li>
+          <li data-task="dashboard moderation analytics">Build moderation dashboard</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Ops</h3>
+        <ul>
+          <li data-task="github actions ci">Create GitHub Actions pipelines</li>
+          <li data-task="otel observability metrics">Add OpenTelemetry and metrics dashboards</li>
+          <li data-task="slo alerts incident">Define SLOs and alert workflows</li>
+          <li data-task="load testing">Run performance and load tests</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="card">
+      <h3>Launch Gate Checklist</h3>
+      <ul>
+        <li>No critical unresolved defects</li>
+        <li>Tool-call reliability thresholds met</li>
+        <li>High-risk action safeguards validated</li>
+        <li>Audit log completeness validated</li>
+        <li>Incident runbooks tested</li>
+      </ul>
+    </section>
+  </main>
+
+  <script src="./assets/js/app.js"></script>
+</body>
+</html>

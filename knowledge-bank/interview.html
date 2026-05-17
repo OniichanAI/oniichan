@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deep Interview - Knowledge Bank</title>
+  <link rel="stylesheet" href="./assets/css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Deep Interview</div>
+    <nav class="nav">
+      <a href="./index.html">Overview</a>
+      <a href="./architecture.html">Architecture</a>
+      <a href="./backend-ai.html">Backend + AI</a>
+      <a href="./frontend.html">Frontend</a>
+      <a href="./security-data-ops.html">Security + Data + Ops</a>
+      <a href="./roadmap-todo.html">Roadmap + TODO</a>
+      <a href="./interview.html">Interview</a>
+    </nav>
+  </header>
+
+  <main class="wrapper">
+    <section class="hero">
+      <h1>Final Discovery Interview</h1>
+      <p>These questions resolve remaining ambiguity before implementation. Answer these and the project can move into locked execution mode.</p>
+    </section>
+
+    <section class="accordion">
+      <div class="accordion-item open">
+        <button class="accordion-head">Moderation and Autonomy</button>
+        <div class="accordion-body">
+          <ol>
+            <li>Should autonomy mode be allowed to ban directly in v1?</li>
+            <li>Which sanctions require human-in-the-loop always?</li>
+            <li>What is the initial slow-mode sensitivity model?</li>
+            <li>After how many uncertain decisions should autonomy auto-disable?</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <button class="accordion-head">Behavior Scoring</button>
+        <div class="accordion-body">
+          <ol>
+            <li>How fast should violation penalties decay over time?</li>
+            <li>Which moderator actions should override score predictions?</li>
+            <li>What is the acceptable false-positive rate for critical flags?</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <button class="accordion-head">Data and Retention</button>
+        <div class="accordion-body">
+          <ol>
+            <li>How long should raw prompts and moderation evidence be retained by default?</li>
+            <li>Should old raw content be anonymized or deleted?</li>
+            <li>Do you need export and hard-delete tools in v1?</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <button class="accordion-head">Delivery and Scope Control</button>
+        <div class="accordion-body">
+          <ol>
+            <li>What is the minimum viable launch date?</li>
+            <li>What weekly team capacity is available?</li>
+            <li>If schedule slips, which features are cut first?</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Execution Readiness Gauge</h3>
+      <p>Current status based on gathered input:</p>
+      <div class="kv"><span>Product Scope</span><strong>High</strong></div>
+      <div class="meter"><span style="width: 92%;"></span></div>
+      <div class="kv" style="margin-top:10px;"><span>Technical Direction</span><strong>High</strong></div>
+      <div class="meter"><span style="width: 89%;"></span></div>
+      <div class="kv" style="margin-top:10px;"><span>Operational Constraints</span><strong>Medium</strong></div>
+      <div class="meter"><span style="width: 70%;"></span></div>
+      <div class="kv" style="margin-top:10px;"><span>Policy Specificity</span><strong>Medium</strong></div>
+      <div class="meter"><span style="width: 68%;"></span></div>
+    </section>
+  </main>
+
+  <script src="./assets/js/app.js"></script>
+</body>
+</html>
