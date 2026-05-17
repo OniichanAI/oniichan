@@ -1,3 +1,4 @@
+import re
 from uuid import uuid4
 from datetime import UTC, datetime, timedelta
 
@@ -20,7 +21,8 @@ from app.schemas.auth import (
     DiscordUserIdentity,
 )
 from app.schemas.tenant import TenantResponse
-from app.schemas.user import UserResponse
+from app.schemas.user import MeResponse, UserResponse
+from app.services.audit import record_event
 from app.services.discord_oauth import DiscordOAuthService
 
 
@@ -50,9 +52,54 @@ async def get_current_user(request: Request, db: Session = Depends(get_db)) -> U
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
 
 
-@router.get("/me", response_model=UserResponse)
-async def get_me(user: User = Depends(get_current_user)) -> User:
-    return user
+_PLACEHOLDER_NAME_PATTERN = re.compile(r"^Guild \d+$")
+_refreshed_tenants: set[str] = set()
+
+
+async def _backfill_placeholder_names(db: Session, tenants: list[Tenant]) -> None:
+    """Look up real guild names for tenants stuck on the `Guild <id>` fallback.
+
+    Runs at most once per tenant per process. Silent on failure — the
+    placeholder name is harmless, just ugly.
+    """
+    if not settings.discord_bot_token:
+        return
+    for tenant in tenants:
+        if not _PLACEHOLDER_NAME_PATTERN.match(tenant.name):
+            continue
+        if str(tenant.id) in _refreshed_tenants:
+            continue
+        guild = db.scalar(
+            select(DiscordGuild).where(DiscordGuild.tenant_id == tenant.id)
+        )
+        if guild is None:
+            continue
+        info = await DiscordOAuthService.fetch_guild_info(guild_id=guild.discord_guild_id)
+        _refreshed_tenants.add(str(tenant.id))
+        if info and (name := info.get("name")):
+            tenant.name = name
+            guild.guild_name = name
+    db.commit()
+
+
+@router.get("/me", response_model=MeResponse)
+async def get_me(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MeResponse:
+    tenants = list(
+        db.scalars(
+            select(Tenant)
+            .join(UserTenantRole, UserTenantRole.tenant_id == Tenant.id)
+            .where(UserTenantRole.user_id == user.id, Tenant.is_active.is_(True))
+            .order_by(Tenant.name)
+        ).all()
+    )
+    await _backfill_placeholder_names(db, tenants)
+    return MeResponse(
+        user=UserResponse.model_validate(user),
+        tenants=[TenantResponse.model_validate(t) for t in tenants],
+    )
 
 
 @router.get("/discord/login", response_model=DiscordLoginResponse)
@@ -197,7 +244,8 @@ async def discord_bot_installed(
             UserTenantRole.user_id == user.id,
         )
     )
-    if existing_role is None:
+    is_new_membership = existing_role is None
+    if is_new_membership:
         db.add(
             UserTenantRole(
                 id=uuid4(),
@@ -206,6 +254,16 @@ async def discord_bot_installed(
                 app_role=AppRole.OWNER,
             )
         )
+
+    record_event(
+        db,
+        tenant_id=tenant.id,
+        actor_user_id=user.id,
+        event_type="tenant.provisioned" if is_new_membership else "tenant.reauthorized",
+        summary=f"{user.username} installed the bot on {tenant.name}",
+        risk_tier="low",
+        details={"guild_id": guild_id, "guild_name": tenant.name},
+    )
 
     db.commit()
     db.refresh(tenant)

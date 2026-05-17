@@ -1,55 +1,40 @@
-import { Injectable, signal } from '@angular/core';
-import { Observable, of, delay } from 'rxjs';
+import { Injectable, inject } from '@angular/core';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { Observable } from 'rxjs';
 
-export interface AuditLogEntry {
+export interface AuditEvent {
   id: string;
-  actor: string;
-  action: string;
-  timestamp: Date;
-  riskTier: 'low' | 'medium' | 'high';
-  rationale: string;
-  outcome: string;
+  tenant_id: string;
+  actor_user_id: string | null;
+  event_type: string;
+  risk_tier: 'low' | 'medium' | 'high' | string;
+  summary: string;
+  details: Record<string, unknown>;
+  created_at: string;
 }
 
-@Injectable({
-  providedIn: 'root',
-})
+export interface AuditEventList {
+  items: AuditEvent[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AuditQuery {
+  limit?: number;
+  offset?: number;
+  eventType?: string;
+}
+
+@Injectable({ providedIn: 'root' })
 export class AuditService {
-  private logsSignal = signal<AuditLogEntry[]>([]);
-  logs = this.logsSignal.asReadonly();
+  private http = inject(HttpClient);
 
-  fetchLogs(): void {
-    // Mocking API call
-    const mockLogs: AuditLogEntry[] = [
-      {
-        id: '1',
-        actor: 'AI Assistant',
-        action: 'Ban User',
-        timestamp: new Date(),
-        riskTier: 'high',
-        rationale: 'User detected sending malicious links in #general.',
-        outcome: 'Success',
-      },
-      {
-        id: '2',
-        actor: 'Admin (ensui)',
-        action: 'Create Channel',
-        timestamp: new Date(Date.now() - 3600000),
-        riskTier: 'medium',
-        rationale: 'New project discussion.',
-        outcome: 'Success',
-      },
-      {
-        id: '3',
-        actor: 'AI Assistant',
-        action: 'Enable Slow Mode',
-        timestamp: new Date(Date.now() - 7200000),
-        riskTier: 'low',
-        rationale: 'Rapid message burst detected.',
-        outcome: 'Success',
-      },
-    ];
-
-    of(mockLogs).pipe(delay(500)).subscribe(logs => this.logsSignal.set(logs));
+  list(query: AuditQuery = {}): Observable<AuditEventList> {
+    let params = new HttpParams();
+    if (query.limit != null) params = params.set('limit', String(query.limit));
+    if (query.offset != null) params = params.set('offset', String(query.offset));
+    if (query.eventType) params = params.set('event_type', query.eventType);
+    return this.http.get<AuditEventList>('/api/v1/audit', { params });
   }
 }

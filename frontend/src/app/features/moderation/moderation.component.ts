@@ -1,96 +1,113 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ModerationService } from './moderation.service';
+import { RouterLink } from '@angular/router';
+import { ModerationService, ModerationState } from './moderation.service';
 import { CardComponent } from '../../shared/ui/card/card.component';
 
 @Component({
   selector: 'app-moderation',
   standalone: true,
-  imports: [CommonModule, CardComponent],
+  imports: [CommonModule, RouterLink, CardComponent],
   template: `
     <div class="space-y-6">
-      <app-card title="Moderation Overview" subtitle="Monitor and manage server moderation activities.">
+      <app-card title="Moderation overview" subtitle="Live snapshot pulled from Discord plus tenant-scoped audit counts.">
+        <div class="mt-4 flex gap-3 text-xs text-slate-500">
+          <button
+            (click)="reload()"
+            [disabled]="loading()"
+            class="rounded-xl border border-slate-200 px-3 py-1.5 font-medium text-slate-700 transition hover:border-slate-300 disabled:opacity-50"
+          >
+            {{ loading() ? 'Refreshing...' : 'Refresh' }}
+          </button>
+        </div>
       </app-card>
 
-      <!-- Stats Grid -->
-      <div class="grid gap-6 md:grid-cols-4">
-        <app-card padding="md">
-          <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Actions</h3>
-          <p class="mt-2 text-2xl font-bold text-slate-900">{{ stats()?.totalActions || 0 }}</p>
-        </app-card>
-        <app-card padding="md">
-          <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Bans</h3>
-          <p class="mt-2 text-2xl font-bold text-red-600">{{ stats()?.bans || 0 }}</p>
-        </app-card>
-        <app-card padding="md">
-          <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Kicks</h3>
-          <p class="mt-2 text-2xl font-bold text-orange-600">{{ stats()?.kicks || 0 }}</p>
-        </app-card>
-        <app-card padding="md">
-          <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Mutes</h3>
-          <p class="mt-2 text-2xl font-bold text-slate-900">{{ stats()?.mutes || 0 }}</p>
-        </app-card>
-      </div>
-
-      <div class="grid gap-6 lg:grid-cols-3">
-        <!-- Suspicious Users -->
-        <div class="lg:col-span-2">
-          <app-card title="Suspicious Activity" subtitle="Users with high behavior risk scores.">
-            <div class="mt-4 divide-y divide-slate-100">
-              @for (user of stats()?.suspiciousUsers; track user.id) {
-                <div class="flex items-center justify-between py-4">
-                  <div class="flex items-center gap-3">
-                    <div class="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-400">
-                      {{ user.username.charAt(0) }}
-                    </div>
-                    <div>
-                      <p class="text-sm font-semibold text-slate-900">{{ user.username }}</p>
-                      <p class="text-xs text-slate-500">{{ user.reason }}</p>
-                    </div>
-                  </div>
-                  <div class="flex flex-col items-end">
-                    <span
-                      class="rounded-full px-2 py-1 text-xs font-bold"
-                      [class.bg-red-50]="user.score >= 80"
-                      [class.text-red-700]="user.score >= 80"
-                      [class.bg-orange-50]="user.score < 80"
-                      [class.text-orange-700]="user.score < 80"
-                    >
-                      Score: {{ user.score }}
-                    </span>
-                    <button class="mt-1 text-[10px] text-[#5865F2] hover:underline">View Evidence</button>
-                  </div>
-                </div>
-              }
-            </div>
+      @if (loading() && !state()) {
+        <div class="flex items-center justify-center py-12 text-slate-400">
+          <div class="h-6 w-6 animate-spin rounded-full border-4 border-solid border-[#5865F2] border-r-transparent"></div>
+          <span class="ml-3 text-sm">Loading server state...</span>
+        </div>
+      } @else {
+        <div class="grid gap-6 md:grid-cols-4">
+          <app-card padding="md">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Members</h3>
+            <p class="mt-2 text-2xl font-bold text-slate-900">
+              {{ formatNumber(state()?.guild?.member_count) }}
+            </p>
+            <p class="mt-1 text-xs text-slate-500">Approximate (via Discord)</p>
+          </app-card>
+          <app-card padding="md">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Channels</h3>
+            <p class="mt-2 text-2xl font-bold text-slate-900">
+              {{ formatNumber(state()?.guild?.channel_count) }}
+            </p>
+            <p class="mt-1 text-xs text-slate-500">All types</p>
+          </app-card>
+          <app-card padding="md">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Text channels</h3>
+            <p class="mt-2 text-2xl font-bold text-[#5865F2]">
+              {{ formatNumber(state()?.guild?.text_channel_count) }}
+            </p>
+          </app-card>
+          <app-card padding="md">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Voice channels</h3>
+            <p class="mt-2 text-2xl font-bold text-orange-600">
+              {{ formatNumber(state()?.guild?.voice_channel_count) }}
+            </p>
           </app-card>
         </div>
 
-        <!-- Placeholder for Trends Chart -->
-        <div>
-          <app-card title="7-Day Trend" subtitle="Moderation action frequency.">
-            <div class="mt-8 flex h-48 items-end justify-between gap-2 px-2">
-              @for (day of stats()?.trends; track day.date) {
-                <div class="flex flex-1 flex-col items-center gap-2">
-                  <div
-                    class="w-full rounded-t-lg bg-[#5865F2]/20 transition-all hover:bg-[#5865F2]"
-                    [style.height.%]="(day.count / 35) * 100"
-                  ></div>
-                  <span class="text-[8px] text-slate-400">{{ day.date | date:'EE' }}</span>
-                </div>
-              }
+        <app-card title="Audit activity" subtitle="Total recorded actions for this tenant.">
+          <div class="mt-4 flex items-center justify-between">
+            <div>
+              <p class="text-4xl font-bold text-slate-900">{{ state()?.recent_actions ?? 0 }}</p>
+              <p class="mt-1 text-xs text-slate-500">All event types</p>
             </div>
+            <a
+              routerLink="/audit"
+              class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-[#5865F2] hover:text-[#5865F2]"
+            >
+              Open audit log →
+            </a>
+          </div>
+        </app-card>
+
+        @if (!state()?.guild?.member_count) {
+          <app-card padding="md">
+            <p class="text-sm text-slate-600">
+              Member and channel counts come from Discord using your bot token. If they're empty,
+              make sure <code class="rounded bg-slate-100 px-1 py-0.5 text-xs">DISCORD_BOT_TOKEN</code>
+              is set in <code class="rounded bg-slate-100 px-1 py-0.5 text-xs">backend/.env</code> and the
+              bot is still in the server.
+            </p>
           </app-card>
-        </div>
-      </div>
+        }
+      }
     </div>
   `,
 })
 export class ModerationComponent implements OnInit {
   private moderationService = inject(ModerationService);
-  stats = this.moderationService.stats;
+
+  state = signal<ModerationState | null>(null);
+  loading = signal(false);
 
   ngOnInit(): void {
-    this.moderationService.fetchStats();
+    this.reload();
+  }
+
+  reload(): void {
+    this.loading.set(true);
+    this.moderationService.getState().subscribe({
+      next: (s) => {
+        this.state.set(s);
+        this.loading.set(false);
+      },
+      error: () => this.loading.set(false),
+    });
+  }
+
+  formatNumber(value: number | null | undefined): string {
+    return value == null ? '—' : value.toLocaleString();
   }
 }

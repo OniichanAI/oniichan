@@ -2,6 +2,7 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { TenantService } from '../../stores/tenant.service';
+import { SettingsService } from '../../stores/settings.service';
 import { AuthService } from '../../auth/auth.service';
 
 @Component({
@@ -99,10 +100,26 @@ import { AuthService } from '../../auth/auth.service';
             <button routerLink="/onboarding" class="text-xs text-[#5865F2] hover:underline">Switch</button>
           </div>
 
-          <div class="flex items-center gap-4">
-            <span class="inline-flex items-center rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
-              Bot Online
-            </span>
+          <div class="flex items-center gap-3">
+            @if (settingsService.killSwitch()) {
+              <a
+                routerLink="/settings"
+                class="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-red-700 ring-1 ring-inset ring-red-600/30 hover:bg-red-100"
+              >
+                <span class="h-1.5 w-1.5 rounded-full bg-red-500"></span>
+                Kill switch
+              </a>
+            } @else if (settingsService.execution()) {
+              <span class="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+                <span class="h-1.5 w-1.5 rounded-full bg-green-500"></span>
+                Live execution
+              </span>
+            } @else {
+              <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-300/40">
+                <span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+                Dry-run
+              </span>
+            }
           </div>
         </header>
 
@@ -116,15 +133,18 @@ import { AuthService } from '../../auth/auth.service';
 })
 export class AppShellComponent implements OnInit {
   tenantService = inject(TenantService);
+  settingsService = inject(SettingsService);
   authService = inject(AuthService);
 
   ngOnInit(): void {
-    if (!this.tenantService.currentTenant()) {
-      this.tenantService.loadCurrentTenant();
-    }
+    // Refresh the user + tenants on entry so a stale tab picks up changes.
+    this.authService.checkAuth().subscribe();
+    // Hydrate tenant settings so the kill-switch badge reflects current state.
+    this.settingsService.load().subscribe();
   }
 
   onLogout(): void {
+    this.settingsService.clear();
     this.authService.logout();
   }
 }
