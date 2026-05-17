@@ -16,11 +16,13 @@ branch_labels = None
 depends_on = None
 
 
-app_role_enum = sa.Enum("owner", "admin", "moderator", "analyst", "viewer", name="app_role")
+app_role_enum = postgresql.ENUM("owner", "admin", "moderator", "analyst", "viewer", name="app_role", create_type=False)
 
 
 def upgrade() -> None:
-    app_role_enum.create(op.get_bind(), checkfirst=True)
+    postgresql.ENUM("owner", "admin", "moderator", "analyst", "viewer", name="app_role").create(
+        op.get_bind(), checkfirst=True
+    )
 
     op.create_table(
         "tenants",

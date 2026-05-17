@@ -2,7 +2,8 @@
   "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
   "version": 1,
   "cli": {
-    "packageManager": "npm"
+    "packageManager": "npm",
+    "analytics": false
   },
   "newProjectRoot": "projects",
   "projects": {
@@ -57,7 +58,8 @@
               "buildTarget": "ai-discord-ops-web:build:production"
             },
             "development": {
-              "buildTarget": "ai-discord-ops-web:build:development"
+              "buildTarget": "ai-discord-ops-web:build:development",
+              "proxyConfig": "proxy.conf.json"
             }
           },
           "defaultConfiguration": "development"

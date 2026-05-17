@@ -15,3 +15,7 @@ class DiscordUserIdentity(BaseModel):
 
 class DiscordBotInstallResponse(BaseModel):
     install_url: str
+
+
+class BotInstalledRequest(BaseModel):
+    guild_id: str

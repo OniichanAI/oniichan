@@ -8,6 +8,12 @@ from uuid import UUID
 
 
 def create_app() -> FastAPI:
+    if settings.session_signing_secret in ("", "change_me", "replace_with_strong_secret"):
+        raise RuntimeError(
+            "SESSION_SIGNING_SECRET is unset or still the placeholder. "
+            "Generate one with `python -c 'import secrets; print(secrets.token_urlsafe(48))'`."
+        )
+
     app = FastAPI(
         title=settings.app_name,
         version="0.1.0",

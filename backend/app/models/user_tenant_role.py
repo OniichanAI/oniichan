@@ -24,7 +24,14 @@ class UserTenantRole(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         PG_UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     user_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    app_role: Mapped[AppRole] = mapped_column(Enum(AppRole, name="app_role"), nullable=False)
+    app_role: Mapped[AppRole] = mapped_column(
+        Enum(
+            AppRole,
+            name="app_role",
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        nullable=False,
+    )
     discord_role_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     tenant = relationship("Tenant", back_populates="role_bindings")
