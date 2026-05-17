@@ -12,6 +12,8 @@ from app.models.tenant import Tenant
 from app.models.user import User
 from app.models.user_tenant_role import UserTenantRole
 from app.schemas.tenant import TenantCreateRequest, TenantResponse
+from app.schemas.tenant_settings import TenantSettingsResponse, TenantSettingsUpdate
+from app.services import tenant_settings as tenant_settings_service
 
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
@@ -49,3 +51,27 @@ def get_current_tenant(
     if not tenant:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
     return tenant
+
+
+@router.get("/me/settings", response_model=TenantSettingsResponse)
+def get_tenant_settings(
+    tenant_id: UUID = Depends(require_tenant_membership),
+    db: Session = Depends(get_db),
+) -> TenantSettingsResponse:
+    settings = tenant_settings_service.get_or_create(db, tenant_id)
+    return TenantSettingsResponse.model_validate(settings)
+
+
+@router.put("/me/settings", response_model=TenantSettingsResponse)
+def update_tenant_settings(
+    payload: TenantSettingsUpdate,
+    tenant_id: UUID = Depends(require_tenant_membership),
+    db: Session = Depends(get_db),
+) -> TenantSettingsResponse:
+    settings = tenant_settings_service.get_or_create(db, tenant_id)
+    updates = payload.model_dump(exclude_unset=True)
+    for key, value in updates.items():
+        setattr(settings, key, value)
+    db.commit()
+    db.refresh(settings)
+    return TenantSettingsResponse.model_validate(settings)

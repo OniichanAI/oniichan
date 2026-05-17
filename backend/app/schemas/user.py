@@ -1,5 +1,9 @@
-from pydantic import BaseModel
 from typing import Optional
+
+from pydantic import BaseModel
+
+from app.schemas.tenant import TenantResponse
+
 
 class UserResponse(BaseModel):
     discord_user_id: str
@@ -9,3 +13,8 @@ class UserResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class MeResponse(BaseModel):
+    user: UserResponse
+    tenants: list[TenantResponse]
