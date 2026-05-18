@@ -1,135 +1,88 @@
-"""Heuristic intent parser for ChatOps v0.
+"""Intent-parsing facade.
 
-Recognizes a small grammar of moderation commands without an LLM. The shape is
-deliberately the same as what an LLM tool-call response would look like
-(intent + params + confidence + risk_tier), so swapping this for a real model
-is a one-file change.
+Routes to one of:
+  - JSON-mode LLM parser (default — works on every OpenAI-compat endpoint,
+    best for small open-source models per our eval)
+  - Tool-calling LLM parser (better on stronger models; opt-in via LLM_MODE)
+  - Regex fallback (always available; fires when LLM is disabled or fails)
+
+Importers should only use `parse()` / `parse_stream()` from this module. The
+underlying impls are private to the package and can be swapped without
+touching callers.
 """
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass, field
-from typing import Any, Literal
+import logging
+from collections.abc import AsyncIterator
+from typing import Any
+
+from app.core.config import settings
+from app.services import intent_parser_json, intent_parser_llm, intent_parser_regex
+from app.services.intent_types import ParsedIntent  # re-exported
 
 
-RiskTier = Literal["low", "medium", "high"]
+logger = logging.getLogger("app.intent")
 
 
-@dataclass
-class ParsedIntent:
-    kind: str  # "chat" | "slowmode" | "announce" | "lookup_user" | "summary" | "unknown"
-    summary: str
-    params: dict[str, Any] = field(default_factory=dict)
-    risk_tier: RiskTier = "low"
-    confidence: float = 0.0
-    requires_confirmation: bool = False
-    assistant_reply: str = ""
+async def parse(
+    text: str,
+    *,
+    history: list[dict[str, Any]] | None = None,
+) -> ParsedIntent:
+    """Async to support the LLM paths. The regex path is sync but cheap.
+
+    `history` is an optional list of prior `{role, content}` turns. Regex
+    fallback ignores it (it's keyword-based) — the LLM paths use it for
+    conversation context.
+    """
+    if settings.llm_api_key:
+        if settings.llm_mode == "tools":
+            llm_result = await intent_parser_llm.parse(text, history=history)
+        else:
+            llm_result = await intent_parser_json.parse(text, history=history)
+
+        if llm_result is not None:
+            return llm_result
+        logger.info("LLM intent parse returned None; falling back to regex")
+
+    return intent_parser_regex.parse(text)
 
 
-_SLOWMODE_PAT = re.compile(
-    r"\b(?:enable\s+)?slowmode\b(?:\s+(?:to|for|of|with))?\s*(\d+)\s*(s|sec|secs|second|seconds|m|min|minute|minutes)?",
-    re.IGNORECASE,
-)
-_DISABLE_SLOWMODE_PAT = re.compile(r"\b(?:disable|turn off|stop)\s+slowmode\b", re.IGNORECASE)
-_ANNOUNCE_PAT = re.compile(r"\b(?:announce|broadcast|post)\s+(?:that\s+)?(.+)", re.IGNORECASE)
-_LOOKUP_PAT = re.compile(r"\b(?:look\s*up|who\s+is|info\s+(?:on|about))\s+@?(\w[\w\-_.]{1,32})", re.IGNORECASE)
-_SUMMARY_PAT = re.compile(r"\b(?:summary|status|overview|how(?:'s| is)\s+(?:the|my)\s+server|health)\b", re.IGNORECASE)
+async def parse_stream(
+    text: str,
+    *,
+    history: list[dict[str, Any]] | None = None,
+) -> AsyncIterator["intent_parser_llm.ParseStreamEvent"]:
+    """Streaming intent parse. Only the tool-calling LLM path streams natively.
+
+    Other modes (JSON, regex) are turned into a single-shot pseudo-stream:
+    one `delta` containing the full assistant_reply, then `done` with the
+    final ParsedIntent. The caller's SSE wire format stays uniform.
+    """
+    if settings.llm_api_key and settings.llm_mode == "tools":
+        final_intent: ParsedIntent | None = None
+        async for event in intent_parser_llm.parse_stream(text, history=history):
+            if event.delta:
+                yield event
+            if event.done:
+                final_intent = event.final
+                if final_intent is not None:
+                    yield event
+                    return
+                # LLM stream failed — fall through to regex below.
+                logger.info("LLM stream returned no intent; falling back to regex")
+                break
+
+    # Non-streaming path (JSON mode or regex fallback): synthesize a single
+    # delta + done so the SSE consumer doesn't have to special-case modes.
+    if settings.llm_api_key and settings.llm_mode == "json":
+        json_result = await intent_parser_json.parse(text, history=history)
+        intent = json_result if json_result is not None else intent_parser_regex.parse(text)
+    else:
+        intent = intent_parser_regex.parse(text)
+
+    yield intent_parser_llm.ParseStreamEvent(delta=intent.assistant_reply)
+    yield intent_parser_llm.ParseStreamEvent(done=True, final=intent)
 
 
-def _to_seconds(value: int, unit: str | None) -> int:
-    if unit and unit.lower().startswith("m"):
-        return value * 60
-    return value
-
-
-def parse(text: str) -> ParsedIntent:
-    cleaned = text.strip()
-    if not cleaned:
-        return ParsedIntent(
-            kind="unknown",
-            summary="empty input",
-            assistant_reply="I didn't catch that — try `enable slowmode 10s` or `summary`.",
-            confidence=1.0,
-        )
-
-    if _DISABLE_SLOWMODE_PAT.search(cleaned):
-        return ParsedIntent(
-            kind="slowmode",
-            summary="Disable slow mode",
-            params={"seconds": 0},
-            risk_tier="medium",
-            confidence=0.95,
-            requires_confirmation=True,
-            assistant_reply="I'll turn off slow mode in the current channel. Confirm to proceed.",
-        )
-
-    if (match := _SLOWMODE_PAT.search(cleaned)) is not None:
-        seconds = _to_seconds(int(match.group(1)), match.group(2))
-        seconds = max(0, min(seconds, 21600))  # Discord's hard cap
-        return ParsedIntent(
-            kind="slowmode",
-            summary=f"Set slow mode to {seconds}s",
-            params={"seconds": seconds},
-            risk_tier="medium",
-            confidence=0.95,
-            requires_confirmation=True,
-            assistant_reply=(
-                f"I'll set slow mode to {seconds} seconds in the current channel. Confirm to proceed."
-            ),
-        )
-
-    if (match := _ANNOUNCE_PAT.search(cleaned)) is not None:
-        body = match.group(1).strip().strip(".")
-        return ParsedIntent(
-            kind="announce",
-            summary=f"Announce: {body[:60]}{'…' if len(body) > 60 else ''}",
-            params={"text": body},
-            risk_tier="medium",
-            confidence=0.85,
-            requires_confirmation=True,
-            assistant_reply=f'I\'ll post the following announcement: "{body}". Confirm to send.',
-        )
-
-    if (match := _LOOKUP_PAT.search(cleaned)) is not None:
-        target = match.group(1)
-        return ParsedIntent(
-            kind="lookup_user",
-            summary=f"Lookup {target}",
-            params={"username": target},
-            risk_tier="low",
-            confidence=0.7,
-            requires_confirmation=False,
-            assistant_reply=(
-                f"User lookup isn't wired to Discord yet — I'd normally show recent activity and "
-                f"audit history for @{target}."
-            ),
-        )
-
-    if _SUMMARY_PAT.search(cleaned):
-        return ParsedIntent(
-            kind="summary",
-            summary="Server summary",
-            risk_tier="low",
-            confidence=0.8,
-            requires_confirmation=False,
-            assistant_reply=(
-                "Open the Dashboard or Moderation pages for the current snapshot — "
-                "member count, channels, and recent audit activity are pulled live from Discord."
-            ),
-        )
-
-    return ParsedIntent(
-        kind="chat",
-        summary="conversation",
-        risk_tier="low",
-        confidence=0.3,
-        requires_confirmation=False,
-        assistant_reply=(
-            "I can run safe moderation commands like:\n"
-            "• `enable slowmode 30s`\n"
-            "• `disable slowmode`\n"
-            "• `announce server maintenance at 8pm`\n"
-            "• `lookup @username`\n"
-            "• `summary` — for a server health overview"
-        ),
-    )
+__all__ = ["parse", "parse_stream", "ParsedIntent"]

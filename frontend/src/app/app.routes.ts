@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { tenantGuard } from './core/guards/tenant.guard';
+import { bootstrapGuard } from './core/guards/bootstrap.guard';
 
 export const routes: Routes = [
   {
@@ -17,8 +18,13 @@ export const routes: Routes = [
     loadComponent: () => import('./features/auth/onboarding/onboarding.component').then(m => m.OnboardingComponent),
   },
   {
-    path: '',
+    path: 'welcome',
     canActivate: [authGuard, tenantGuard],
+    loadComponent: () => import('./features/welcome/welcome.component').then(m => m.WelcomeComponent),
+  },
+  {
+    path: '',
+    canActivate: [authGuard, tenantGuard, bootstrapGuard],
     loadComponent: () => import('./core/layout/app-shell/app-shell.component').then(m => m.AppShellComponent),
     children: [
       {

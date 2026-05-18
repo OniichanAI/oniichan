@@ -9,6 +9,7 @@ export interface GuildSnapshot {
   channel_count: number | null;
   text_channel_count: number | null;
   voice_channel_count: number | null;
+  category_count: number | null;
 }
 
 export interface ModerationState {

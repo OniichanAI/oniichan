@@ -9,11 +9,19 @@ export interface TenantSettings {
   autonomy_enabled: boolean;
   max_risk_tier: RiskTier;
   kill_switch_active: boolean;
+  bootstrap_completed: boolean;
   updated_at: string;
 }
 
 export type TenantSettingsPatch = Partial<
-  Pick<TenantSettings, 'execution_enabled' | 'autonomy_enabled' | 'max_risk_tier' | 'kill_switch_active'>
+  Pick<
+    TenantSettings,
+    | 'execution_enabled'
+    | 'autonomy_enabled'
+    | 'max_risk_tier'
+    | 'kill_switch_active'
+    | 'bootstrap_completed'
+  >
 >;
 
 @Injectable({ providedIn: 'root' })
@@ -24,6 +32,7 @@ export class SettingsService {
   settings = this.settingsSignal.asReadonly();
   killSwitch = computed(() => this.settingsSignal()?.kill_switch_active ?? false);
   execution = computed(() => this.settingsSignal()?.execution_enabled ?? false);
+  bootstrapCompleted = computed(() => this.settingsSignal()?.bootstrap_completed ?? false);
 
   load(): Observable<TenantSettings> {
     return this.http

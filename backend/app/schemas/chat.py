@@ -41,3 +41,9 @@ class ChatHistoryResponse(BaseModel):
 class ActionResolutionResponse(BaseModel):
     action: PendingActionResponse
     receipt_text: str
+
+
+class ChatHealthResponse(BaseModel):
+    llm_enabled: bool
+    provider: str
+    model: str | None

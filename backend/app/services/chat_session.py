@@ -1,17 +1,27 @@
-"""In-memory chat session store, scoped per (tenant_id, user_id).
+"""Per-(tenant, user) chat history, persisted to Postgres.
 
-This is intentionally non-persistent for v0 — chats reset on backend restart.
-When ChatOps moves to LLM-backed streaming, this should become a Redis-backed
-store keyed by a session id.
+Was an in-memory dict during the v0 spike; replaced with DB-backed storage
+so messages survive backend restarts and we can later run analytics on
+historical conversations (which intents people use, which actions get
+cancelled, etc.).
+
+The public dataclasses (`ChatMessage`, `PendingAction`) are intentionally
+preserved unchanged — they're the contract the SSE endpoint and the
+response schema both depend on. The functions are now thin adapters over
+SQLAlchemy: load → row, map row → dataclass, hand back.
 """
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
-from threading import RLock
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
+from sqlalchemy import delete, select
+from sqlalchemy.orm import Session
+
+from app.models.chat import ChatAction as ChatActionRow
+from app.models.chat import ChatMessage as ChatMessageRow
 from app.services.intent_parser import ParsedIntent
 
 
@@ -43,90 +53,143 @@ class ChatMessage:
     confidence: float | None = None
 
 
-@dataclass
-class _Session:
-    messages: list[ChatMessage] = field(default_factory=list)
-    actions: dict[str, PendingAction] = field(default_factory=dict)
+# ---------- adapters ----------
 
 
-_lock = RLock()
-_sessions: dict[tuple[str, str], _Session] = {}
+def _row_to_action(row: ChatActionRow | None) -> PendingAction | None:
+    if row is None:
+        return None
+    return PendingAction(
+        id=str(row.id),
+        kind=row.kind,
+        summary=row.summary,
+        risk_tier=row.risk_tier,
+        params=dict(row.params or {}),
+        requires_confirmation=row.requires_confirmation,
+        status=row.status,  # type: ignore[arg-type]
+        receipt=dict(row.receipt) if row.receipt else None,
+        created_at=row.created_at.isoformat(),
+    )
 
 
-def _key(tenant_id: UUID, user_id: UUID) -> tuple[str, str]:
-    return (str(tenant_id), str(user_id))
+def _row_to_message(row: ChatMessageRow) -> ChatMessage:
+    return ChatMessage(
+        id=str(row.id),
+        role=row.role,  # type: ignore[arg-type]
+        content=row.content,
+        created_at=row.created_at.isoformat(),
+        action=_row_to_action(row.action),
+        intent_kind=row.intent_kind,
+        confidence=row.confidence,
+    )
 
 
-def _get_session(tenant_id: UUID, user_id: UUID) -> _Session:
-    key = _key(tenant_id, user_id)
-    session = _sessions.get(key)
-    if session is None:
-        session = _Session()
-        _sessions[key] = session
-    return session
+# ---------- queries ----------
 
 
-def list_messages(tenant_id: UUID, user_id: UUID) -> list[ChatMessage]:
-    with _lock:
-        return list(_get_session(tenant_id, user_id).messages)
+def list_messages(db: Session, tenant_id: UUID, user_id: UUID) -> list[ChatMessage]:
+    rows = db.scalars(
+        select(ChatMessageRow)
+        .where(ChatMessageRow.tenant_id == tenant_id, ChatMessageRow.user_id == user_id)
+        .order_by(ChatMessageRow.created_at)
+    ).all()
+    return [_row_to_message(r) for r in rows]
 
 
-def reset(tenant_id: UUID, user_id: UUID) -> None:
-    with _lock:
-        _sessions.pop(_key(tenant_id, user_id), None)
+def reset(db: Session, tenant_id: UUID, user_id: UUID) -> None:
+    """Drop every message + action belonging to this (tenant, user).
 
-
-def append_user_message(tenant_id: UUID, user_id: UUID, text: str) -> ChatMessage:
-    with _lock:
-        session = _get_session(tenant_id, user_id)
-        message = ChatMessage(
-            id=str(uuid4()),
-            role="user",
-            content=text,
-            created_at=datetime.now(UTC).isoformat(),
+    Two-step because messages reference actions via SET NULL on delete —
+    deleting messages first is safe; deleting actions first would orphan
+    the FK pointer in any persisted messages.
+    """
+    db.execute(
+        delete(ChatMessageRow).where(
+            ChatMessageRow.tenant_id == tenant_id,
+            ChatMessageRow.user_id == user_id,
         )
-        session.messages.append(message)
-        return message
+    )
+    db.execute(
+        delete(ChatActionRow).where(
+            ChatActionRow.tenant_id == tenant_id,
+            ChatActionRow.user_id == user_id,
+        )
+    )
+    db.commit()
+
+
+def append_user_message(
+    db: Session, tenant_id: UUID, user_id: UUID, text: str
+) -> ChatMessage:
+    row = ChatMessageRow(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        user_id=user_id,
+        role="user",
+        content=text,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _row_to_message(row)
 
 
 def append_assistant_reply(
-    tenant_id: UUID,
-    user_id: UUID,
-    intent: ParsedIntent,
+    db: Session, tenant_id: UUID, user_id: UUID, intent: ParsedIntent
 ) -> ChatMessage:
-    with _lock:
-        session = _get_session(tenant_id, user_id)
-        action: PendingAction | None = None
-        if intent.requires_confirmation:
-            action = PendingAction(
-                id=str(uuid4()),
-                kind=intent.kind,
-                summary=intent.summary,
-                risk_tier=intent.risk_tier,
-                params=dict(intent.params),
-                requires_confirmation=True,
-            )
-            session.actions[action.id] = action
-
-        message = ChatMessage(
-            id=str(uuid4()),
-            role="assistant",
-            content=intent.assistant_reply,
-            created_at=datetime.now(UTC).isoformat(),
-            action=action,
-            intent_kind=intent.kind,
-            confidence=intent.confidence,
+    action_row: ChatActionRow | None = None
+    if intent.requires_confirmation:
+        action_row = ChatActionRow(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            user_id=user_id,
+            kind=intent.kind,
+            summary=intent.summary,
+            risk_tier=intent.risk_tier,
+            params=dict(intent.params),
+            requires_confirmation=True,
+            status="pending",
         )
-        session.messages.append(message)
-        return message
+        db.add(action_row)
+        db.flush()  # populate id before message references it
+
+    message_row = ChatMessageRow(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        user_id=user_id,
+        role="assistant",
+        content=intent.assistant_reply,
+        intent_kind=intent.kind,
+        confidence=intent.confidence,
+        action_id=action_row.id if action_row else None,
+    )
+    db.add(message_row)
+    db.commit()
+    db.refresh(message_row)
+    return _row_to_message(message_row)
 
 
-def get_action(tenant_id: UUID, user_id: UUID, action_id: str) -> PendingAction | None:
-    with _lock:
-        return _get_session(tenant_id, user_id).actions.get(action_id)
+def get_action(
+    db: Session, tenant_id: UUID, user_id: UUID, action_id: str
+) -> PendingAction | None:
+    """Tenant + user scoping in the query itself — a foreign session can't
+    fetch someone else's action even with its raw UUID."""
+    try:
+        action_uuid = UUID(action_id)
+    except ValueError:
+        return None
+    row = db.scalar(
+        select(ChatActionRow).where(
+            ChatActionRow.id == action_uuid,
+            ChatActionRow.tenant_id == tenant_id,
+            ChatActionRow.user_id == user_id,
+        )
+    )
+    return _row_to_action(row)
 
 
 def update_action(
+    db: Session,
     tenant_id: UUID,
     user_id: UUID,
     action_id: str,
@@ -134,15 +197,25 @@ def update_action(
     status: ActionStatus,
     receipt: dict[str, Any] | None = None,
 ) -> PendingAction | None:
-    with _lock:
-        session = _get_session(tenant_id, user_id)
-        action = session.actions.get(action_id)
-        if action is None:
-            return None
-        action.status = status
-        if receipt is not None:
-            action.receipt = receipt
-        return action
+    try:
+        action_uuid = UUID(action_id)
+    except ValueError:
+        return None
+    row = db.scalar(
+        select(ChatActionRow).where(
+            ChatActionRow.id == action_uuid,
+            ChatActionRow.tenant_id == tenant_id,
+            ChatActionRow.user_id == user_id,
+        )
+    )
+    if row is None:
+        return None
+    row.status = status
+    if receipt is not None:
+        row.receipt = receipt
+    db.commit()
+    db.refresh(row)
+    return _row_to_action(row)
 
 
 def message_to_dict(message: ChatMessage) -> dict[str, Any]:

@@ -11,7 +11,10 @@ import { CommonModule } from '@angular/common';
       [class]="buttonClasses"
       (click)="onClick($event)"
     >
-      <div *ngIf="loading" class="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-solid border-current border-r-transparent"></div>
+      <div
+        *ngIf="loading"
+        class="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-solid border-current border-r-transparent"
+      ></div>
       <ng-content></ng-content>
     </button>
   `,
@@ -23,13 +26,17 @@ export class ButtonComponent {
   @Input() loading = false;
 
   get buttonClasses(): string {
-    const baseClasses = 'inline-flex items-center justify-center rounded-xl font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
-    
+    const base =
+      'inline-flex items-center justify-center whitespace-nowrap rounded-2xl font-semibold ' +
+      'transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 ' +
+      'disabled:opacity-50 disabled:cursor-not-allowed';
+
     const variantClasses = {
-      primary: 'bg-[#5865F2] text-white hover:bg-[#4752C4] focus:ring-[#5865F2]',
-      secondary: 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 focus:ring-slate-200',
-      danger: 'bg-red-500 text-white hover:bg-red-600 focus:ring-red-500',
-      ghost: 'bg-transparent text-slate-600 hover:bg-slate-100 focus:ring-slate-100',
+      primary: 'bg-oni-primary text-white hover:bg-oni-primary-deep focus:ring-oni-primary',
+      secondary:
+        'bg-oni-surface border border-oni-border text-oni-ink-strong hover:border-oni-primary focus:ring-oni-primary',
+      danger: 'bg-oni-danger text-white hover:bg-oni-danger-deep focus:ring-oni-danger',
+      ghost: 'bg-transparent text-oni-ink hover:bg-oni-surface-mute focus:ring-oni-border-strong',
     };
 
     const sizeClasses = {
@@ -38,7 +45,7 @@ export class ButtonComponent {
       lg: 'px-6 py-3 text-base',
     };
 
-    return `${baseClasses} ${variantClasses[this.variant]} ${sizeClasses[this.size]}`;
+    return `${base} ${variantClasses[this.variant]} ${sizeClasses[this.size]}`;
   }
 
   onClick(event: MouseEvent): void {
