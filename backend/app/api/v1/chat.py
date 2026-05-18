@@ -229,3 +229,104 @@ def cancel_action(
         ),
         receipt_text=f"Cancelled: {updated.summary}",
     )
+
+
+# ==============================================================================
+# DIRECT MESSAGE MANIPULATION ENDPOINTS (BYPASSING THE AI AGENT)
+# ==============================================================================
+
+@router.post("/direct-message", response_model=DirectActionResponse, status_code=status.HTTP_201_CREATED)
+async def send_direct_message(
+    payload: DirectMessageRequest,
+    tenant_id: UUID = Depends(require_tenant_membership),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DirectActionResponse:
+    """
+    Instantly sends a plain text message to a specific Discord channel.
+    
+    This endpoint bypasses the AI agent and the pending actions queue, acting 
+    as an immediate dashboard override. It enforces multi-tenant access control, 
+    triggers the Discord API executor, and logs a 'low' risk event to the audit trail.
+    """
+    result = await discord_executor.send_message(
+        channel_id=payload.channel_id, 
+        content=payload.text
+    )
+    
+    if not result.ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail=f"Discord error: {result.message}"
+        )
+
+    record_event(
+        db,
+        tenant_id=tenant_id,
+        actor_user_id=user.id,
+        event_type="chat.direct_message.sent",
+        summary=f"Direct message sent to channel {payload.channel_id}",
+        risk_tier="low",
+        details={
+            "channel_id": payload.channel_id,
+            "text": payload.text,
+            "discord_response": result.details
+        },
+    )
+    db.commit()
+
+    return DirectActionResponse(
+        ok=True, 
+        message="Message sent successfully",
+        details=result.details
+    )
+
+
+@router.delete("/channels/{channel_id}/messages/{message_id}", response_model=DirectActionResponse, status_code=status.HTTP_200_OK)
+async def delete_direct_message(
+    channel_id: str,
+    message_id: str,
+    tenant_id: UUID = Depends(require_tenant_membership),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DirectActionResponse:
+    """
+    Immediately deletes a specific message from a given Discord channel.
+    
+    Designed for fast dashboard-driven content moderation. It authenticates the 
+    user against the current tenant, instructs the bot to delete the message via 
+    the Discord API, and records a 'medium' risk event in the database for tracking.
+    """
+    result = await discord_executor.delete_message(
+        channel_id=channel_id, 
+        message_id=message_id
+    )
+    
+    if not result.ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail=f"Discord error: {result.message}"
+        )
+
+    record_event(
+        db,
+        tenant_id=tenant_id,
+        actor_user_id=user.id,
+        event_type="chat.direct_message.deleted",
+        summary=f"Message {message_id} deleted from channel {channel_id}",
+        risk_tier="medium",
+        details={
+            "channel_id": channel_id,
+            "message_id": message_id,
+            "discord_response": result.details
+        },
+    )
+    db.commit()
+
+    return DirectActionResponse(
+        ok=True, 
+        message="Message deleted successfully",
+        details=result.details
+    )
+
+
