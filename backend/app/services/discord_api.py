@@ -69,6 +69,15 @@ async def find_role(guild_id: str, name: str) -> dict | None:
     return None
 
 
+async def fetch_channel_messages(channel_id: str, *, limit: int = 50) -> list[dict] | None:
+    """GET /channels/{id}/messages?limit=…. Returns newest first."""
+    result = await _get(
+        f"/channels/{channel_id}/messages",
+        params={"limit": str(max(1, min(limit, 100)))},
+    )
+    return result if isinstance(result, list) else None
+
+
 async def search_member(guild_id: str, query: str, *, limit: int = 5) -> list[dict] | None:
     """Find guild members matching a username/display name prefix.
 

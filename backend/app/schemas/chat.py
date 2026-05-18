@@ -47,3 +47,63 @@ class ChatHealthResponse(BaseModel):
     llm_enabled: bool
     provider: str
     model: str | None
+
+
+# ==============================================================================
+# DIRECT ACTION SCHEMAS
+# ==============================================================================
+
+class DirectMessageRequest(BaseModel):
+    channel_id: str = Field(..., min_length=1, description="The Discord channel ID target")
+    text: str = Field(..., min_length=1, max_length=2000, description="The message content to be sent")
+
+
+class DirectActionResponse(BaseModel):
+    ok: bool = Field(..., description="Indicates if the direct action was successful")
+    message: str = Field(..., description="A brief status message describing the outcome")
+    details: dict[str, Any] | None = Field(None, description="Native payload details returned from the Discord API")
+
+
+class BulkDeleteRequest(BaseModel):
+    message_ids: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="A list of Discord message IDs to be deleted simultaneously (Max 100)",
+    )
+
+
+# ==============================================================================
+# ADVANCED MODERATION SCHEMAS
+# ==============================================================================
+
+class DiscordMessageAuthor(BaseModel):
+    id: str
+    username: str
+    discriminator: str
+    avatar: str | None = None
+
+
+class ChannelMessageFetchResponse(BaseModel):
+    id: str
+    content: str
+    author: DiscordMessageAuthor
+    timestamp: str
+
+
+class ChannelLockRequest(BaseModel):
+    reason: str = Field(
+        ...,
+        min_length=3,
+        max_length=500,
+        description="The reason for locking down this channel (logged in audit trail)",
+    )
+
+
+class EditMessageRequest(BaseModel):
+    text: str = Field(
+        ...,
+        min_length=1,
+        max_length=2000,
+        description="The new text content to update the message with",
+    )

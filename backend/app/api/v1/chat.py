@@ -13,14 +13,26 @@ from app.models.discord import DiscordGuild
 from app.models.user import User
 from app.schemas.chat import (
     ActionResolutionResponse,
+    BulkDeleteRequest,
+    ChannelLockRequest,
+    ChannelMessageFetchResponse,
     ChatHealthResponse,
     ChatHistoryResponse,
     ChatMessageResponse,
     ChatSendRequest,
     ChatSendResponse,
+    DirectActionResponse,
+    DirectMessageRequest,
+    EditMessageRequest,
     PendingActionResponse,
 )
-from app.services import chat_session, discord_api, discord_executor, intent_parser, llm_client
+from app.services import (
+    chat_session,
+    discord_api,
+    discord_executor,
+    intent_parser,
+    llm_client,
+)
 from app.services import tenant_settings as tenant_settings_service
 from app.services.audit import record_event
 
@@ -48,7 +60,6 @@ def _load_history(
         return []
     tail = recent[-_HISTORY_TURNS:]
     return [{"role": m.role, "content": m.content} for m in tail if m.content]
-
 
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -245,6 +256,25 @@ async def _resolve_member(guild_id: str, query: str) -> tuple[dict | None, str |
     if len(members) == 0:
         return None, f"No member matching @{query}"
     return members[0], None
+
+
+async def _ensure_channel_in_tenant(db: Session, tenant_id: UUID, channel_id: str) -> str | None:
+    """Returns an error string if the channel isn't part of the tenant's guild.
+
+    Direct-action endpoints accept a raw channel id from the client, so we
+    have to confirm it belongs to the tenant's linked Discord guild before
+    touching it — otherwise a caller could moderate any channel whose id
+    they guess.
+    """
+    guild_id = _get_guild_id(db, tenant_id)
+    if guild_id is None:
+        return "No Discord guild linked to this tenant"
+    channels = await discord_api.get_guild_channels(guild_id)
+    if channels is None:
+        return "Could not reach Discord (check DISCORD_BOT_TOKEN and bot membership)"
+    if not any(str(c.get("id")) == str(channel_id) for c in channels):
+        return "Channel does not belong to this tenant's server"
+    return None
 
 
 async def _execute(
@@ -452,3 +482,290 @@ def cancel_action(
         ),
         receipt_text=f"Cancelled: {updated.summary}",
     )
+
+
+# ---------------------------------------------------------------------------
+# Direct (non-AI) message + channel actions. All scope checks go through
+# _ensure_channel_in_tenant so a caller can't moderate channels outside their
+# own guild even if they brute-force a channel id.
+# ---------------------------------------------------------------------------
+
+
+def _direct_audit(
+    db: Session,
+    *,
+    tenant_id: UUID,
+    user_id: UUID,
+    event_type: str,
+    summary: str,
+    risk_tier: str,
+    details: dict,
+) -> None:
+    record_event(
+        db,
+        tenant_id=tenant_id,
+        actor_user_id=user_id,
+        event_type=event_type,
+        summary=summary,
+        risk_tier=risk_tier,
+        details=details,
+    )
+    db.commit()
+
+
+@router.post(
+    "/direct-message",
+    response_model=DirectActionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def send_direct_message(
+    payload: DirectMessageRequest,
+    tenant_id: UUID = Depends(require_tenant_membership),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DirectActionResponse:
+    """Send a plain text message to a channel without going through the AI."""
+    err = await _ensure_channel_in_tenant(db, tenant_id, payload.channel_id)
+    if err:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=err)
+
+    result = await discord_executor.post_announcement(
+        channel_id=payload.channel_id, content=payload.text
+    )
+    if not result.ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Discord error: {result.message}",
+        )
+
+    _direct_audit(
+        db,
+        tenant_id=tenant_id,
+        user_id=user.id,
+        event_type="chat.direct_message.sent",
+        summary=f"Direct message sent to channel {payload.channel_id}",
+        risk_tier="low",
+        details={
+            "channel_id": payload.channel_id,
+            "text": payload.text,
+            "discord_response": result.details,
+        },
+    )
+    return DirectActionResponse(ok=True, message="Message sent", details=result.details)
+
+
+@router.put(
+    "/channels/{channel_id}/messages/{message_id}",
+    response_model=DirectActionResponse,
+)
+async def edit_direct_message(
+    channel_id: str,
+    message_id: str,
+    payload: EditMessageRequest,
+    tenant_id: UUID = Depends(require_tenant_membership),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DirectActionResponse:
+    err = await _ensure_channel_in_tenant(db, tenant_id, channel_id)
+    if err:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=err)
+
+    result = await discord_executor.edit_message(
+        channel_id=channel_id, message_id=message_id, content=payload.text
+    )
+    if not result.ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Discord error: {result.message}",
+        )
+
+    _direct_audit(
+        db,
+        tenant_id=tenant_id,
+        user_id=user.id,
+        event_type="chat.direct_message.updated",
+        summary=f"Message {message_id} updated in channel {channel_id}",
+        risk_tier="low",
+        details={
+            "channel_id": channel_id,
+            "message_id": message_id,
+            "new_text": payload.text,
+            "discord_response": result.details,
+        },
+    )
+    return DirectActionResponse(ok=True, message="Message updated", details=result.details)
+
+
+@router.delete(
+    "/channels/{channel_id}/messages/{message_id}",
+    response_model=DirectActionResponse,
+)
+async def delete_direct_message(
+    channel_id: str,
+    message_id: str,
+    tenant_id: UUID = Depends(require_tenant_membership),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DirectActionResponse:
+    err = await _ensure_channel_in_tenant(db, tenant_id, channel_id)
+    if err:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=err)
+
+    result = await discord_executor.delete_message(
+        channel_id=channel_id, message_id=message_id
+    )
+    if not result.ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Discord error: {result.message}",
+        )
+
+    _direct_audit(
+        db,
+        tenant_id=tenant_id,
+        user_id=user.id,
+        event_type="chat.direct_message.deleted",
+        summary=f"Message {message_id} deleted from channel {channel_id}",
+        risk_tier="medium",
+        details={
+            "channel_id": channel_id,
+            "message_id": message_id,
+            "discord_response": result.details,
+        },
+    )
+    return DirectActionResponse(ok=True, message="Message deleted", details=result.details)
+
+
+@router.post(
+    "/channels/{channel_id}/messages/bulk-delete",
+    response_model=DirectActionResponse,
+)
+async def bulk_delete_messages(
+    channel_id: str,
+    payload: BulkDeleteRequest,
+    tenant_id: UUID = Depends(require_tenant_membership),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DirectActionResponse:
+    err = await _ensure_channel_in_tenant(db, tenant_id, channel_id)
+    if err:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=err)
+
+    result = await discord_executor.bulk_delete_messages(
+        channel_id=channel_id, message_ids=payload.message_ids
+    )
+    if not result.ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Discord error: {result.message}",
+        )
+
+    _direct_audit(
+        db,
+        tenant_id=tenant_id,
+        user_id=user.id,
+        event_type="chat.direct_message.bulk_deleted",
+        summary=f"Bulk-deleted {len(payload.message_ids)} messages from {channel_id}",
+        risk_tier="high",
+        details={
+            "channel_id": channel_id,
+            "message_ids": payload.message_ids,
+            "discord_response": result.details,
+        },
+    )
+    return DirectActionResponse(
+        ok=True,
+        message=f"Deleted {len(payload.message_ids)} messages",
+        details=result.details,
+    )
+
+
+@router.get(
+    "/channels/{channel_id}/messages",
+    response_model=list[ChannelMessageFetchResponse],
+)
+async def fetch_channel_messages(
+    channel_id: str,
+    limit: int = 50,
+    tenant_id: UUID = Depends(require_tenant_membership),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[ChannelMessageFetchResponse]:
+    """Read recent messages from a channel for rendering in the UI."""
+    err = await _ensure_channel_in_tenant(db, tenant_id, channel_id)
+    if err:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=err)
+
+    limit = max(1, min(limit, 100))
+    messages = await discord_api.fetch_channel_messages(channel_id, limit=limit)
+    if messages is None:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not reach Discord",
+        )
+
+    out: list[ChannelMessageFetchResponse] = []
+    for m in messages:
+        author = m.get("author") or {}
+        out.append(
+            ChannelMessageFetchResponse(
+                id=str(m.get("id") or ""),
+                content=str(m.get("content") or ""),
+                author={
+                    "id": str(author.get("id") or ""),
+                    "username": str(author.get("username") or ""),
+                    "discriminator": str(author.get("discriminator") or "0"),
+                    "avatar": author.get("avatar"),
+                },
+                timestamp=str(m.get("timestamp") or ""),
+            )
+        )
+    return out
+
+
+@router.post(
+    "/channels/{channel_id}/lock",
+    response_model=DirectActionResponse,
+)
+async def lock_channel(
+    channel_id: str,
+    payload: ChannelLockRequest,
+    tenant_id: UUID = Depends(require_tenant_membership),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DirectActionResponse:
+    """Emergency channel lockdown — denies SEND_MESSAGES to @everyone."""
+    err = await _ensure_channel_in_tenant(db, tenant_id, channel_id)
+    if err:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=err)
+
+    guild_id = _get_guild_id(db, tenant_id)
+    if guild_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No Discord guild linked to this tenant",
+        )
+
+    result = await discord_executor.lock_channel(
+        channel_id=channel_id, guild_id=guild_id, reason=payload.reason
+    )
+    if not result.ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Discord error: {result.message}",
+        )
+
+    _direct_audit(
+        db,
+        tenant_id=tenant_id,
+        user_id=user.id,
+        event_type="chat.channel.locked",
+        summary=f"Channel {channel_id} locked. Reason: {payload.reason}",
+        risk_tier="high",
+        details={
+            "channel_id": channel_id,
+            "reason": payload.reason,
+            "discord_response": result.details,
+        },
+    )
+    return DirectActionResponse(ok=True, message="Channel locked", details=result.details)

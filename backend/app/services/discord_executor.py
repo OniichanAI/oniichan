@@ -206,6 +206,112 @@ async def set_member_role(
     )
 
 
+async def edit_message(channel_id: str, message_id: str, content: str) -> ExecutionResult:
+    """PATCH /channels/{id}/messages/{message_id}. Bot can only edit messages
+    it sent itself — Discord returns 403 otherwise."""
+    if not settings.discord_bot_token:
+        return ExecutionResult(False, 0, "Bot token not configured", {})
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.patch(
+            f"{_BASE}/channels/{channel_id}/messages/{message_id}",
+            headers=_headers(),
+            json={"content": content[:2000]},
+        )
+    ok = response.status_code == 200
+    return ExecutionResult(
+        ok=ok,
+        status_code=response.status_code,
+        message="Message edited" if ok else response.text[:200],
+        details={"channel_id": channel_id, "message_id": message_id},
+    )
+
+
+async def delete_message(channel_id: str, message_id: str) -> ExecutionResult:
+    """DELETE /channels/{id}/messages/{message_id}."""
+    if not settings.discord_bot_token:
+        return ExecutionResult(False, 0, "Bot token not configured", {})
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.delete(
+            f"{_BASE}/channels/{channel_id}/messages/{message_id}",
+            headers=_headers(),
+        )
+    ok = response.status_code == 204
+    return ExecutionResult(
+        ok=ok,
+        status_code=response.status_code,
+        message="Message deleted" if ok else response.text[:200],
+        details={"channel_id": channel_id, "message_id": message_id},
+    )
+
+
+async def bulk_delete_messages(channel_id: str, message_ids: list[str]) -> ExecutionResult:
+    """POST /channels/{id}/messages/bulk-delete.
+
+    Discord caps the batch at 100 and refuses messages older than 14 days.
+    For a single id it falls back to a normal delete (the bulk endpoint
+    rejects len=1).
+    """
+    if not settings.discord_bot_token:
+        return ExecutionResult(False, 0, "Bot token not configured", {})
+    ids = [str(m) for m in message_ids if m][:100]
+    if not ids:
+        return ExecutionResult(False, 400, "No message ids supplied", {"channel_id": channel_id})
+    if len(ids) == 1:
+        return await delete_message(channel_id, ids[0])
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.post(
+            f"{_BASE}/channels/{channel_id}/messages/bulk-delete",
+            headers=_headers(),
+            json={"messages": ids},
+        )
+    ok = response.status_code == 204
+    return ExecutionResult(
+        ok=ok,
+        status_code=response.status_code,
+        message=f"Bulk-deleted {len(ids)} messages" if ok else response.text[:200],
+        details={"channel_id": channel_id, "count": len(ids)},
+    )
+
+
+# Discord permission flag: SEND_MESSAGES = 1 << 11
+_SEND_MESSAGES_PERMISSION = 1 << 11
+
+
+async def lock_channel(
+    channel_id: str,
+    guild_id: str,
+    *,
+    reason: str | None = None,
+) -> ExecutionResult:
+    """Emergency lockdown — PUT /channels/{id}/permissions/{everyone_role}
+    denying SEND_MESSAGES to @everyone.
+
+    The @everyone role's id always equals the guild id — so we can build the
+    overwrite without an extra /roles lookup.
+    """
+    if not settings.discord_bot_token:
+        return ExecutionResult(False, 0, "Bot token not configured", {})
+    headers = _headers()
+    if reason:
+        headers["X-Audit-Log-Reason"] = reason[:512]
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.put(
+            f"{_BASE}/channels/{channel_id}/permissions/{guild_id}",
+            headers=headers,
+            json={
+                "type": 0,  # 0 = role overwrite
+                "deny": str(_SEND_MESSAGES_PERMISSION),
+            },
+        )
+    ok = response.status_code in (200, 204)
+    return ExecutionResult(
+        ok=ok,
+        status_code=response.status_code,
+        message="Channel locked" if ok else response.text[:200],
+        details={"channel_id": channel_id, "guild_id": guild_id},
+    )
+
+
 async def post_announcement(channel_id: str, content: str) -> ExecutionResult:
     """POST /channels/{id}/messages."""
     if not settings.discord_bot_token:
