@@ -41,3 +41,17 @@ class ChatHistoryResponse(BaseModel):
 class ActionResolutionResponse(BaseModel):
     action: PendingActionResponse
     receipt_text: str
+
+# ==============================================================================
+# DIRECT ACTION SCHEMAS
+# ==============================================================================
+
+class DirectMessageRequest(BaseModel):
+    channel_id: str = Field(..., min_length=1, description="The Discord channel ID target")
+    text: str = Field(..., min_length=1, max_length=2000, description="The message content to be sent")
+
+
+class DirectActionResponse(BaseModel):
+    ok: bool = Field(..., description="Indicates if the direct action was successful")
+    message: str = Field(..., description="A brief status message describing the outcome")
+    details: dict[str, Any] | None = Field(None, description="Native payload details returned from the Discord API")
