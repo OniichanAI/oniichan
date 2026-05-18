@@ -55,3 +55,20 @@ class DirectActionResponse(BaseModel):
     ok: bool = Field(..., description="Indicates if the direct action was successful")
     message: str = Field(..., description="A brief status message describing the outcome")
     details: dict[str, Any] | None = Field(None, description="Native payload details returned from the Discord API")
+
+class BulkDeleteRequest(BaseModel):
+    message_ids: list[str] = Field(
+        ..., 
+        min_size=1, 
+        max_size=100, 
+        description="A list of Discord message IDs to be deleted simultaneously (Max 100)"
+    )
+
+
+class EditMessageRequest(BaseModel):
+    text: str = Field(
+        ..., 
+        min_length=1, 
+        max_length=2000, 
+        description="The new text content to update the message with"
+    )

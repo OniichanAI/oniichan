@@ -281,6 +281,54 @@ async def send_direct_message(
         details=result.details
     )
 
+@router.put("/channels/{channel_id}/messages/{message_id}", response_model=DirectActionResponse, status_code=status.HTTP_200_OK)
+async def edit_direct_message(
+    channel_id: str,
+    message_id: str,
+    payload: EditMessageRequest,
+    tenant_id: UUID = Depends(require_tenant_membership),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DirectActionResponse:
+    """
+    Updates the content of an existing message previously sent by the bot.
+    
+    Allows administrators to correct announcements or text directly from the web panel. 
+    It enforces multi-tenant access controls and logs a 'low' risk event to the audit trail.
+    """
+    result = await discord_executor.edit_message(
+        channel_id=channel_id, 
+        message_id=message_id,
+        content=payload.text
+    )
+    
+    if not result.ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail=f"Discord error: {result.message}"
+        )
+
+    record_event(
+        db,
+        tenant_id=tenant_id,
+        actor_user_id=user.id,
+        event_type="chat.direct_message.updated",
+        summary=f"Message {message_id} updated in channel {channel_id}",
+        risk_tier="low",
+        details={
+            "channel_id": channel_id,
+            "message_id": message_id,
+            "new_text": payload.text,
+            "discord_response": result.details
+        },
+    )
+    db.commit()
+
+    return DirectActionResponse(
+        ok=True, 
+        message="Message updated successfully",
+        details=result.details
+    )
 
 @router.delete("/channels/{channel_id}/messages/{message_id}", response_model=DirectActionResponse, status_code=status.HTTP_200_OK)
 async def delete_direct_message(
@@ -330,3 +378,48 @@ async def delete_direct_message(
     )
 
 
+@router.post("/channels/{channel_id}/messages/bulk-delete", response_model=DirectActionResponse, status_code=status.HTTP_200_OK)
+async def bulk_delete_messages(
+    channel_id: str,
+    payload: BulkDeleteRequest,
+    tenant_id: UUID = Depends(require_tenant_membership),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DirectActionResponse:
+    """
+    Deletes multiple messages simultaneously from a given Discord channel.
+    
+    This endpoint allows fast dashboard moderation during spam attacks. It enforces 
+    multi-tenant safety boundaries and records a 'high' risk event in the audit trail.
+    """
+    result = await discord_executor.bulk_delete_messages(
+        channel_id=channel_id, 
+        message_ids=payload.message_ids
+    )
+    
+    if not result.ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail=f"Discord error: {result.message}"
+        )
+
+    record_event(
+        db,
+        tenant_id=tenant_id,
+        actor_user_id=user.id,
+        event_type="chat.direct_message.bulk_deleted",
+        summary=f"Bulk deleted {len(payload.message_ids)} messages from channel {channel_id}",
+        risk_tier="high",
+        details={
+            "channel_id": channel_id,
+            "message_ids": payload.message_ids,
+            "discord_response": result.details
+        },
+    )
+    db.commit()
+
+    return DirectActionResponse(
+        ok=True, 
+        message=f"Successfully deleted {len(payload.message_ids)} messages",
+        details=result.details
+    )
