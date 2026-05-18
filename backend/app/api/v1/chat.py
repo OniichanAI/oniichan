@@ -423,3 +423,77 @@ async def bulk_delete_messages(
         message=f"Successfully deleted {len(payload.message_ids)} messages",
         details=result.details
     )
+
+# ==============================================================================
+# ADVANCED MODERATION ENDPOINTS
+# ==============================================================================
+
+@router.get("/channels/{channel_id}/messages", response_model=list[ChannelMessageFetchResponse], status_code=status.HTTP_200_OK)
+async def fetch_channel_messages(
+    channel_id: str,
+    limit: int = 50,
+    tenant_id: UUID = Depends(require_tenant_membership),
+    user: User = Depends(get_current_user),
+) -> list[ChannelMessageFetchResponse]:
+    """
+    Fetches the latest messages from a specific Discord channel to render in the UI.
+    
+    This query does not alter state, so it records no audit event but guarantees 
+    the requesting user belongs to the current tenant before retrieving the logs.
+    """
+    result = await discord_executor.get_messages(channel_id=channel_id, limit=limit)
+    
+    if not result.ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail=f"Discord error: {result.message}"
+        )
+        
+    return result.data
+
+
+@router.post("/channels/{channel_id}/lock", response_model=DirectActionResponse, status_code=status.HTTP_200_OK)
+async def lock_channel(
+    channel_id: str,
+    payload: ChannelLockRequest,
+    tenant_id: UUID = Depends(require_tenant_membership),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DirectActionResponse:
+    """
+    Locks down a channel by overriding permissions to prevent standard users from speaking.
+    
+    A critical emergency moderation tool used during raids. It requires a mandatory reason, 
+    restricts actions per tenant scope, and generates a 'high' risk audit log entry.
+    """
+    result = await discord_executor.lock_channel(
+        channel_id=channel_id, 
+        reason=payload.reason
+    )
+    
+    if not result.ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail=f"Discord error: {result.message}"
+        )
+
+    record_event(
+        db,
+        tenant_id=tenant_id,
+        actor_user_id=user.id,
+        event_type="chat.channel.locked",
+        summary=f"Channel {channel_id} lockdown triggered. Reason: {payload.reason}",
+        risk_tier="high",
+        details={
+            "channel_id": channel_id,
+            "reason": payload.reason,
+            "discord_response": result.details
+        },
+    )
+    db.commit()
+
+    return DirectActionResponse(
+        ok=True, 
+        message="Channel successfully locked down",
+        details=result.details
+    )

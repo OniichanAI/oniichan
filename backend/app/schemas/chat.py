@@ -42,6 +42,7 @@ class ActionResolutionResponse(BaseModel):
     action: PendingActionResponse
     receipt_text: str
 
+
 # ==============================================================================
 # DIRECT ACTION SCHEMAS
 # ==============================================================================
@@ -65,6 +66,31 @@ class BulkDeleteRequest(BaseModel):
     )
 
 
+# ==============================================================================
+# ADVANCED MODERATION SCHEMAS
+# ==============================================================================
+
+class DiscordMessageAuthor(BaseModel):
+    id: str
+    username: str
+    discriminator: str
+    avatar: str | None = None
+
+
+class ChannelMessageFetchResponse(BaseModel):
+    id: str
+    content: str
+    author: DiscordMessageAuthor
+    timestamp: str
+
+
+class ChannelLockRequest(BaseModel):
+    reason: str = Field(
+        ..., 
+        min_length=3, 
+        max_length=500, 
+        description="The reason for locking down this channel (logged in audit trail)"
+    )
 class EditMessageRequest(BaseModel):
     text: str = Field(
         ..., 
