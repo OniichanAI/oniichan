@@ -16,6 +16,12 @@ from app.schemas.chat import (
     ChatSendRequest,
     ChatSendResponse,
     PendingActionResponse,
+    DirectActionResponse,
+    DirectMessageRequest,
+    EditMessageRequest,
+    BulkDeleteRequest,
+    ChannelMessageFetchResponse,
+    ChannelLockRequest,
 )
 from app.services import chat_session, discord_api, discord_executor, intent_parser
 from app.services import tenant_settings as tenant_settings_service
