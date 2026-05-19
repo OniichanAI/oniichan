@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.auth import get_current_user
 from app.core.dependencies import require_tenant_membership
-from app.db.session import get_db
+from app.db.session import SessionLocal, get_db
 from app.models.discord import DiscordGuild
 from app.models.user import User
 from app.schemas.chat import (
@@ -144,15 +144,20 @@ async def stream_message(
     swaps in the full ChatMessageResponse on `complete` (which carries the
     intent_kind + action card payload).
     """
-    # Load history BEFORE appending the new user message — the LLM client
-    # adds the current user_message as the last entry itself.
-    history = _load_history(db, tenant_id, user.id)
-    user_msg = chat_session.append_user_message(db, tenant_id, user.id, payload.text)
+    # Snapshot the primitives we need inside the async generator. We can't
+    # touch the `user` ORM instance from within _emit(): FastAPI tears down
+    # the Depends(get_db) session as soon as this handler returns the
+    # StreamingResponse, and the generator runs afterwards — any lazy
+    # attribute load (including `user.id`) raises DetachedInstanceError and
+    # the stream silently dies before emitting the `complete` event, which
+    # is what made action buttons disappear on the frontend.
+    user_id = user.id
+    history = _load_history(db, tenant_id, user_id)
+    user_msg = chat_session.append_user_message(db, tenant_id, user_id, payload.text)
+    user_msg_payload = _to_message_response(user_msg).model_dump(mode="json")
 
     async def _emit():
-        # Tell the client which message id to render under so we don't have
-        # to wait for the first delta before showing the user bubble.
-        yield _sse("start", {"user_message": _to_message_response(user_msg).model_dump(mode="json")})
+        yield _sse("start", {"user_message": user_msg_payload})
 
         from app.services.intent_types import ParsedIntent  # local import — avoids cycle at module load
 
@@ -181,11 +186,18 @@ async def stream_message(
         if not streamed_any_text and final_intent.assistant_reply:
             yield _sse("delta", {"text": final_intent.assistant_reply})
 
-        assistant_msg = chat_session.append_assistant_reply(db, tenant_id, user.id, final_intent)
-        yield _sse(
-            "complete",
-            {"assistant_message": _to_message_response(assistant_msg).model_dump(mode="json")},
-        )
+        # Use a fresh session: the request-scoped one was closed when this
+        # handler returned. The generator outlives its DB dependency.
+        emit_db = SessionLocal()
+        try:
+            assistant_msg = chat_session.append_assistant_reply(
+                emit_db, tenant_id, user_id, final_intent
+            )
+            payload_out = _to_message_response(assistant_msg).model_dump(mode="json")
+        finally:
+            emit_db.close()
+
+        yield _sse("complete", {"assistant_message": payload_out})
 
     return StreamingResponse(
         _emit(),
