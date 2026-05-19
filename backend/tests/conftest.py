@@ -29,8 +29,13 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 # Force the test DB before importing the app. Settings reads env at import.
-os.environ["DATABASE_URL"] = (
-    "postgresql+psycopg://postgres:postgres@postgres:5432/discord_ops_test"
+# In local dev the docker-compose hostname `postgres` resolves inside the
+# backend container. In CI the Postgres service is reached at `localhost`
+# (GH Actions service containers) so we honor whatever DATABASE_URL the
+# caller set — only fall back to the compose hostname if nothing's there.
+os.environ.setdefault(
+    "DATABASE_URL",
+    "postgresql+psycopg://postgres:postgres@postgres:5432/discord_ops_test",
 )
 os.environ.setdefault("SESSION_SIGNING_SECRET", "test-secret-32-chars-long-enough-for-jwt")
 
