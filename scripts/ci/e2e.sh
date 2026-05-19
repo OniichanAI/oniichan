@@ -9,18 +9,31 @@ cleanup() {
   echo "==> E2E: tearing down stack"
   docker compose --profile frontend logs backend frontend > .ci-stack.log 2>&1 || true
   docker compose --profile frontend down -v --remove-orphans || true
+  # Only delete .env if we created it. A developer running this script
+  # locally already has a real .env that we must not stomp.
+  if [ -f backend/.env.ci ]; then
+    rm -f backend/.env backend/.env.ci
+  fi
 }
 trap cleanup EXIT
 
-# A throwaway env. Real bot/OAuth credentials aren't needed — the smoke test
-# only exercises the redirect, not the Discord round-trip.
-export DATABASE_URL="postgresql+psycopg://postgres:postgres@postgres:5432/discord_ops"
-export SESSION_SIGNING_SECRET="e2e-secret-32-chars-long-enough-for-jwt-signing"
-export DISCORD_CLIENT_ID="000000000000000000"
-export DISCORD_CLIENT_SECRET="placeholder"
-export DISCORD_BOT_TOKEN=""
-export DISCORD_REDIRECT_URI="http://localhost:4200/auth/callback"
-export LLM_API_KEY=""
+# docker-compose.yml uses `env_file: ./backend/.env` for the backend
+# service. That file is gitignored (it holds real secrets in dev) so we
+# synthesize a throwaway one for CI. Real Discord credentials aren't
+# needed — the smoke test only exercises the redirect, not the round-trip.
+if [ ! -f backend/.env ]; then
+  cat > backend/.env <<'EOF'
+DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/discord_ops
+SESSION_SIGNING_SECRET=e2e-secret-32-chars-long-enough-for-jwt-signing
+DISCORD_CLIENT_ID=000000000000000000
+DISCORD_CLIENT_SECRET=placeholder
+DISCORD_BOT_TOKEN=
+DISCORD_REDIRECT_URI=http://localhost:4200/auth/callback
+LLM_API_KEY=
+EOF
+  # Marker so cleanup knows it can safely delete; a dev's local .env survives.
+  touch backend/.env.ci
+fi
 
 echo "==> E2E: bringing up stack"
 docker compose --profile frontend up -d --build postgres backend frontend
