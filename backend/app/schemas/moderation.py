@@ -5,9 +5,10 @@ class GuildSnapshot(BaseModel):
     discord_guild_id: str
     name: str
     member_count: int | None
-    channel_count: int | None
+    channel_count: int | None  # text + voice (categories and threads excluded)
     text_channel_count: int | None
     voice_channel_count: int | None
+    category_count: int | None
 
 
 class ModerationStateResponse(BaseModel):

@@ -35,3 +35,9 @@ export interface ActionResolutionResponse {
   action: PendingAction;
   receipt_text: string;
 }
+
+export interface ChatHealth {
+  llm_enabled: boolean;
+  provider: string;
+  model: string | null;
+}

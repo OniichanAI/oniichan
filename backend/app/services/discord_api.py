@@ -40,3 +40,57 @@ async def get_guild(guild_id: str) -> dict | None:
 async def get_guild_channels(guild_id: str) -> list[dict] | None:
     result = await _get(f"/guilds/{guild_id}/channels")
     return result if isinstance(result, list) else None
+
+
+async def list_roles(guild_id: str) -> list[dict] | None:
+    """GET /guilds/{id}/roles — returns all roles in the guild."""
+    result = await _get(f"/guilds/{guild_id}/roles")
+    return result if isinstance(result, list) else None
+
+
+async def find_role(guild_id: str, name: str) -> dict | None:
+    """Case-insensitive lookup of a role by name. Returns the first match
+    or None. The @everyone role is excluded — it can't be assigned anyway."""
+    roles = await list_roles(guild_id)
+    if not roles:
+        return None
+    needle = name.strip().lstrip("@").lower()
+    for role in roles:
+        rname = (role.get("name") or "").lower()
+        if rname == "@everyone":
+            continue
+        if rname == needle:
+            return role
+    # Fall back to startswith for partial matches like "mod" -> "moderator"
+    for role in roles:
+        rname = (role.get("name") or "").lower()
+        if rname.startswith(needle) and rname != "@everyone":
+            return role
+    return None
+
+
+async def fetch_channel_messages(channel_id: str, *, limit: int = 50) -> list[dict] | None:
+    """GET /channels/{id}/messages?limit=…. Returns newest first."""
+    result = await _get(
+        f"/channels/{channel_id}/messages",
+        params={"limit": str(max(1, min(limit, 100)))},
+    )
+    return result if isinstance(result, list) else None
+
+
+async def search_member(guild_id: str, query: str, *, limit: int = 5) -> list[dict] | None:
+    """Find guild members matching a username/display name prefix.
+
+    Returns up to `limit` matches. The Discord endpoint requires the bot to
+    have the GUILD_MEMBERS privileged intent; if that isn't enabled the call
+    returns 403 and we collapse to None (caller treats as "not found").
+    Requires GUILD_MEMBERS intent enabled in the Developer Portal.
+    """
+    query = query.strip().lstrip("@")
+    if not query:
+        return None
+    result = await _get(
+        f"/guilds/{guild_id}/members/search",
+        params={"query": query, "limit": str(min(max(limit, 1), 1000))},
+    )
+    return result if isinstance(result, list) else None

@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, of, tap } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { Observable, of, shareReplay, tap } from 'rxjs';
+import { catchError, finalize, map } from 'rxjs/operators';
 import { Me, User } from './user.model';
 import { Tenant } from '../http/tenant.model';
 import { TenantService } from '../stores/tenant.service';
@@ -15,6 +15,11 @@ export class AuthService {
 
   user = this.userSignal.asReadonly();
   isAuthenticated = computed(() => !!this.userSignal());
+
+  // De-duplicate concurrent /auth/me calls (e.g. authGuard + tenantGuard on
+  // the same navigation). Cleared when the request finishes so a later
+  // explicit refresh() actually hits the server.
+  private bootstrap$: Observable<User | null> | null = null;
 
   login(): void {
     this.http
@@ -43,28 +48,36 @@ export class AuthService {
   }
 
   /**
-   * Hydrate user + tenants from /auth/me. Single source of truth.
+   * Hydrate user + tenants from /auth/me. Concurrent callers share one
+   * in-flight request; sequential callers each get a fresh roundtrip.
    * Returns the User on success, null on 401.
    */
   checkAuth(): Observable<User | null> {
-    return this.http.get<Me>('/api/v1/auth/me').pipe(
+    if (this.bootstrap$) return this.bootstrap$;
+
+    this.bootstrap$ = this.http.get<Me>('/api/v1/auth/me').pipe(
       tap((me) => {
         this.userSignal.set(me.user);
         this.tenantService.setTenants(me.tenants);
       }),
-      map((me) => me.user),
+      map((me): User | null => me.user),
       catchError(() => {
         this.userSignal.set(null);
         this.tenantService.clear();
-        return of(null);
+        return of<User | null>(null);
       }),
+      finalize(() => {
+        this.bootstrap$ = null;
+      }),
+      shareReplay({ bufferSize: 1, refCount: false }),
     );
+
+    return this.bootstrap$;
   }
 
   logout(): void {
     this.userSignal.set(null);
     this.tenantService.clear();
-    // settings are cleared by the app shell before invoking this, but be defensive.
     window.location.href = '/login';
   }
 }

@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Forgejo Actions implements the GitHub Actions workflow spec, so this file
+# mirrors .github/workflows/ci.yml closely. The split is intentional —
+# Forgejo never picks up .github/, GitHub never picks up .forgejo/, so each
+# host runs exactly one copy and we can tune service images or runner
+# labels per side without affecting the other.
+#
+# Differences from .github/workflows/ci.yml:
+#   - `runs-on: docker` is the Forgejo Actions convention rather than a
+#     named ubuntu image; the runner provides its own container.
+#   - The Postgres service is reached at hostname `postgres`, not localhost.
+
+jobs:
+  backend:
+    name: Backend (pytest + integration)
+    runs-on: docker
+    container:
+      image: python:3.12-slim
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: discord_ops_test
+    env:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/discord_ops_test
+      SESSION_SIGNING_SECRET: ci-secret-32-chars-long-enough-for-jwt
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install backend deps
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends curl
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Wait for postgres
+        run: |
+          for i in $(seq 1 30); do
+            if python -c "import socket,sys; s=socket.socket(); s.settimeout(2); s.connect(('postgres',5432))" 2>/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Postgres never came up" >&2
+          exit 1
+
+      - name: Run tests
+        run: bash scripts/ci/backend.sh
+
+      - name: Run regex-only intent eval
+        run: bash scripts/ci/eval.sh
+
+  frontend:
+    name: Frontend (vitest + build)
+    runs-on: docker
+    container:
+      image: node:22-bookworm
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/ci/frontend.sh
+
+  # The E2E job needs a docker-in-docker runner to bring up docker-compose.
+  # If your Forgejo runner doesn't expose the host socket, drop this job —
+  # the unit + integration tests above are still the bulk of the signal.
+  e2e:
+    name: E2E smoke (Playwright)
+    runs-on: docker-dind
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/ci/e2e.sh

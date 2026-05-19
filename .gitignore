@@ -25,3 +25,13 @@ dist/
 pgdata/
 redisdata/
 minio-data/
+
+# Test + eval outputs
+backend/eval/results/
+frontend/playwright-report/
+frontend/test-results/
+frontend/blob-report/
+.ci-stack.log
+
+# Local-only export dump (Discord console)
+export.json

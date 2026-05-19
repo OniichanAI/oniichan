@@ -13,47 +13,95 @@ import { ChatService } from './chat.service';
 import { MessageBubbleComponent } from './components/message-bubble/message-bubble.component';
 import { ActionCardComponent } from './components/action-card/action-card.component';
 import { CardComponent } from '../../shared/ui/card/card.component';
+import { OniEmptyComponent } from '../../core/branding/oni-empty.component';
+import { OniIconComponent } from '../../core/branding/oni-icon.component';
+import { ONI } from '../../core/branding/microcopy';
 
 @Component({
   selector: 'app-chatops',
   standalone: true,
-  imports: [CommonModule, FormsModule, MessageBubbleComponent, ActionCardComponent, CardComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    MessageBubbleComponent,
+    ActionCardComponent,
+    CardComponent,
+    OniEmptyComponent,
+    OniIconComponent,
+  ],
   template: `
-    <div class="flex h-full flex-col gap-6">
-      <app-card title="ChatOps" subtitle="Heuristic v0 — recognized intents are parsed locally; LLM streaming comes next.">
-        <div class="mt-3 flex gap-2 text-xs">
+    <div class="flex h-full flex-col gap-8">
+      <app-card [title]="copy.chatops.title" [subtitle]="copy.chatops.sub">
+        <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
           <button
             (click)="onReset()"
-            class="rounded-xl border border-slate-200 px-3 py-1.5 font-medium text-slate-700 transition hover:border-slate-300"
+            class="shrink-0 whitespace-nowrap rounded-2xl border border-oni-border bg-oni-surface px-3 py-1.5 font-medium text-oni-ink-strong transition hover:border-oni-primary"
           >
-            Reset session
+            {{ copy.chatops.reset }}
           </button>
-          <span class="self-center text-slate-400">
-            Try: <code class="rounded bg-slate-100 px-1 py-0.5">enable slowmode 30s</code>,
-            <code class="rounded bg-slate-100 px-1 py-0.5">announce ...</code>,
-            <code class="rounded bg-slate-100 px-1 py-0.5">summary</code>
-          </span>
+
+          @if (chatService.health(); as h) {
+            @if (h.llm_enabled) {
+              <span
+                class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-oni-primary-soft px-2.5 py-1 text-[11px] font-semibold text-oni-primary-deep"
+                title="Intent parsing uses an LLM"
+              >
+                <span class="h-1.5 w-1.5 rounded-full bg-oni-primary"></span>
+                <span class="max-w-[12rem] truncate sm:max-w-none">Powered by {{ h.model }}</span>
+              </span>
+            } @else {
+              <span
+                class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-oni-surface-mute px-2.5 py-1 text-[11px] font-medium text-oni-ink-mute"
+                title="LLM_API_KEY not set in backend/.env — falling back to regex"
+              >
+                <span class="h-1.5 w-1.5 rounded-full bg-oni-ink-mute"></span>
+                Heuristic mode
+              </span>
+            }
+          }
+        </div>
+
+        <!-- Example chips on their own row; scroll horizontally on narrow
+             screens instead of wrapping into a tall stack. -->
+        <div
+          class="mt-3 -mx-6 overflow-x-auto px-6 sm:mx-0 sm:px-0"
+        >
+          <div class="flex w-max items-center gap-2 text-xs sm:w-auto sm:flex-wrap">
+            <span class="shrink-0 whitespace-nowrap text-oni-ink-mute">Try:</span>
+            @for (example of copy.chatops.examples; track example) {
+              <code
+                class="shrink-0 cursor-pointer whitespace-nowrap rounded-lg bg-oni-surface-mute px-2 py-1 font-mono text-[11px] text-oni-ink-strong transition hover:bg-oni-primary-soft hover:text-oni-primary-deep"
+                (click)="useExample(example)"
+                role="button"
+                tabindex="0"
+                [attr.aria-label]="'Use example: ' + example"
+              >
+                {{ example }}
+              </code>
+            }
+          </div>
         </div>
       </app-card>
 
-      <div class="flex flex-1 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div #scroll class="flex-1 space-y-6 overflow-y-auto p-6">
+      <div
+        class="flex flex-1 flex-col overflow-hidden rounded-3xl border border-oni-border bg-oni-surface"
+        style="box-shadow: var(--shadow-oni-soft)"
+      >
+        <div #scroll class="flex-1 space-y-6 overflow-y-auto p-4 sm:p-6">
           @if (chatService.messages().length === 0 && !chatService.busy()) {
-            <div class="flex h-full flex-col items-center justify-center text-center">
-              <div class="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#5865F2]/10 text-[#5865F2]">
-                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                </svg>
-              </div>
-              <h3 class="text-lg font-bold text-slate-900">Start a conversation</h3>
-              <p class="mx-auto mt-1 max-w-xs text-sm text-slate-500">
-                Ask me to moderate users, manage channels, or give you server insights.
-              </p>
-            </div>
+            <oni-empty
+              size="lg"
+              mood="happy"
+              [title]="copy.chatops.emptyTitle"
+              [message]="copy.chatops.emptyBody"
+            />
           }
 
           @for (msg of chatService.messages(); track msg.id) {
-            <app-message-bubble [message]="msg">
+            <app-message-bubble
+              [message]="msg"
+              [streaming]="chatService.streamingId() === msg.id"
+            >
               @if (msg.action) {
                 <div actions>
                   <app-action-card
@@ -67,38 +115,34 @@ import { CardComponent } from '../../shared/ui/card/card.component';
             </app-message-bubble>
           }
 
-          @if (chatService.busy() && chatService.messages().length > 0) {
-            <div class="flex items-center gap-2 text-xs text-slate-400">
-              <div class="h-3 w-3 animate-spin rounded-full border-2 border-solid border-[#5865F2] border-r-transparent"></div>
-              Thinking...
+          @if (chatService.busy() && !chatService.streamingId() && chatService.messages().length > 0) {
+            <div class="flex items-center gap-2 text-xs text-oni-ink-mute">
+              <div class="h-3 w-3 animate-spin rounded-full border-2 border-solid border-oni-primary border-r-transparent"></div>
+              {{ copy.chatops.busy }}
             </div>
           }
         </div>
 
-        <div class="border-t border-slate-100 bg-slate-50/50 p-4">
+        <div class="border-t border-oni-border bg-oni-surface-mute p-3 sm:p-4">
           <form (submit)="onSend($event)" class="relative">
             <input
               type="text"
               [(ngModel)]="userInput"
               name="prompt"
               [disabled]="chatService.busy()"
-              placeholder="Type a command or ask a question..."
-              class="w-full rounded-2xl border border-slate-200 bg-white px-5 py-4 pr-12 text-sm shadow-sm transition-all focus:border-[#5865F2] focus:outline-none focus:ring-4 focus:ring-[#5865F2]/5 disabled:opacity-60"
+              [placeholder]="copy.chatops.placeholder"
+              class="w-full rounded-2xl border border-oni-border bg-oni-surface px-5 py-4 pr-12 text-sm text-oni-ink shadow-sm transition-all placeholder:text-oni-ink-mute focus:border-oni-primary focus:outline-none focus:ring-4 focus:ring-oni-primary/15 disabled:opacity-60"
             />
             <button
               type="submit"
               [disabled]="!userInput.trim() || chatService.busy()"
-              class="absolute right-2 top-2 flex h-10 w-10 items-center justify-center rounded-xl bg-[#5865F2] text-white transition-all hover:bg-[#4752C4] disabled:bg-slate-300 disabled:opacity-50"
+              class="absolute right-2 top-2 flex h-10 w-10 items-center justify-center rounded-xl bg-oni-primary text-white transition-all hover:bg-oni-primary-deep disabled:bg-oni-border-strong disabled:opacity-50"
               aria-label="Send"
             >
-              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
+              <oni-icon name="send" [size]="18" />
             </button>
           </form>
-          <p class="mt-2 text-center text-[10px] text-slate-400">
-            v0 runs in dry-run mode — confirmed actions are recorded in the audit log but not yet sent to Discord.
-          </p>
+          <p class="mt-2 text-center text-[10px] text-oni-ink-mute">{{ copy.chatops.footer }}</p>
         </div>
       </div>
     </div>
@@ -108,12 +152,14 @@ export class ChatopsComponent implements OnInit, AfterViewChecked {
   chatService = inject(ChatService);
   userInput = '';
   actingOn = signal<string | null>(null);
+  readonly copy = ONI;
 
   @ViewChild('scroll') private scrollContainer?: ElementRef<HTMLElement>;
   private lastScrollLen = 0;
 
   ngOnInit(): void {
     this.chatService.load().subscribe();
+    this.chatService.loadHealth().subscribe();
   }
 
   ngAfterViewChecked(): void {
@@ -127,12 +173,23 @@ export class ChatopsComponent implements OnInit, AfterViewChecked {
     }
   }
 
+  /** Click handler for an example chip — drops the text into the input
+   *  ready to send, lets the user verify/edit before firing. */
+  useExample(text: string): void {
+    this.userInput = text;
+  }
+
   onSend(event: Event): void {
     event.preventDefault();
     const text = this.userInput.trim();
     if (!text || this.chatService.busy()) return;
     this.userInput = '';
-    this.chatService.send(text).subscribe();
+    // Fire-and-forget — the chat service updates signals as tokens arrive,
+    // and the template re-renders. Errors surface via the global toast.
+    this.chatService.sendStream(text).catch(() => {
+      // Already surfaced server-side; swallow here so a network blip
+      // doesn't bubble an UnhandledPromiseRejection.
+    });
   }
 
   onReset(): void {

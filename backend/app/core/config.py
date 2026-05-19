@@ -24,5 +24,22 @@ class Settings(BaseSettings):
     session_signing_secret: str = "change_me"
     default_tenant_header: str = "x-tenant-id"
 
+    # LLM (intent parsing). Disabled until LLM_API_KEY is set, in which case
+    # the OpenAI-compatible /v1/chat/completions endpoint at LLM_BASE_URL is
+    # called. Works as-is against OpenAI, OpenRouter, Groq, Together, Mistral,
+    # Ollama, vLLM, etc. — change base URL + key.
+    llm_provider: str = "openai-compatible"  # future: "anthropic-native"
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_api_key: str = ""
+    llm_model: str = "gpt-4o-mini"
+    llm_timeout_seconds: int = 12
+    llm_max_tokens: int = 400
+    # "json"  — chat-completions with response_format=json_object. Best for
+    #           small open-source models (Llama-3.1-8B, Qwen-7B, Mistral-7B).
+    # "tools" — chat-completions with tools=[...]. Better on stronger models
+    #           (GPT-4o-mini, Claude-3.5-Haiku, Llama-3.3-70B+) — measure
+    #           with eval/run_intent_eval.py before flipping in prod.
+    llm_mode: str = "json"
+
 
 settings = Settings()

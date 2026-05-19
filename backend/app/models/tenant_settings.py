@@ -29,3 +29,7 @@ class TenantSettings(TimestampMixin, Base):
 
     # Hard stop — when true, no execution regardless of other settings.
     kill_switch_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # Flipped true the first time an owner walks through the welcome wizard.
+    # Used by the frontend to route brand-new tenants to /welcome on entry.
+    bootstrap_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

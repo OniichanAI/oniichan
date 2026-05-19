@@ -43,6 +43,12 @@ class ActionResolutionResponse(BaseModel):
     receipt_text: str
 
 
+class ChatHealthResponse(BaseModel):
+    llm_enabled: bool
+    provider: str
+    model: str | None
+
+
 # ==============================================================================
 # DIRECT ACTION SCHEMAS
 # ==============================================================================
@@ -57,12 +63,13 @@ class DirectActionResponse(BaseModel):
     message: str = Field(..., description="A brief status message describing the outcome")
     details: dict[str, Any] | None = Field(None, description="Native payload details returned from the Discord API")
 
+
 class BulkDeleteRequest(BaseModel):
     message_ids: list[str] = Field(
-        ..., 
-        min_size=1, 
-        max_size=100, 
-        description="A list of Discord message IDs to be deleted simultaneously (Max 100)"
+        ...,
+        min_length=1,
+        max_length=100,
+        description="A list of Discord message IDs to be deleted simultaneously (Max 100)",
     )
 
 
@@ -86,15 +93,17 @@ class ChannelMessageFetchResponse(BaseModel):
 
 class ChannelLockRequest(BaseModel):
     reason: str = Field(
-        ..., 
-        min_length=3, 
-        max_length=500, 
-        description="The reason for locking down this channel (logged in audit trail)"
+        ...,
+        min_length=3,
+        max_length=500,
+        description="The reason for locking down this channel (logged in audit trail)",
     )
+
+
 class EditMessageRequest(BaseModel):
     text: str = Field(
-        ..., 
-        min_length=1, 
-        max_length=2000, 
-        description="The new text content to update the message with"
+        ...,
+        min_length=1,
+        max_length=2000,
+        description="The new text content to update the message with",
     )

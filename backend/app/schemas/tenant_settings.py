@@ -12,6 +12,7 @@ class TenantSettingsResponse(BaseModel):
     autonomy_enabled: bool
     max_risk_tier: RiskTier
     kill_switch_active: bool
+    bootstrap_completed: bool
     updated_at: datetime
 
     class Config:
@@ -23,3 +24,4 @@ class TenantSettingsUpdate(BaseModel):
     autonomy_enabled: bool | None = None
     max_risk_tier: RiskTier | None = None
     kill_switch_active: bool | None = None
+    bootstrap_completed: bool | None = None
